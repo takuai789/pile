@@ -66,6 +66,7 @@
   .rows .r span { flex: 1; min-width: 0; }
   .rows .r small { color: var(--tertiary); font-size: 11.5px; margin-left: 4px; }
   .rows .r b { font-variant-numeric: tabular-nums; }
+  .rows .r small.sub2 { display: block; margin: 2px 0 0; }
   .rows .r.over b, .rows .r.over span { color: var(--red); }
   .meter { margin-top: 12px; }
   .meter:first-of-type { margin-top: 2px; }
@@ -231,7 +232,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.4.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -318,8 +319,9 @@
       byAcc.set(p.accountId, (byAcc.get(p.accountId) || 0) + m);
       byPay[p.pay || 'cash'] += m;
       if (p.pay === 'card') {
-        const k = (p.card || 'クレカ').trim() || 'クレカ';
-        const c = cards.get(k) || { m: 0, pts: 0 };
+        // 上限は証券会社ごとに違うので、口座×カードで分けて数える
+        const k = p.accountId + '|' + ((p.card || 'クレカ').trim() || 'クレカ');
+        const c = cards.get(k) || { m: 0, pts: 0, acc: p.accountId, card: (p.card || 'クレカ').trim() || 'クレカ' };
         c.m += m; c.pts += m * (Number(p.rate) || 0) / 100; cards.set(k, c);
         points += m * (Number(p.rate) || 0) / 100;
       }
@@ -432,10 +434,10 @@
 
     // クレカごと
     if (S.cards.size) {
-      const cap = Number(state.settings.cardCap) || 100000;
+      const capOf = (accId) => { const a = accOf(accId); return Number(a && a.cardCap) || Number(state.settings.cardCap) || 100000; };
       html += `<div class="label">クレカ積立（毎月）</div><div class="card"><div class="rows">`
-        + Array.from(S.cards.entries()).map(([k, c]) => `<div class="r${c.m > cap ? ' over' : ''}"><span>${esc(k)}${c.pts > 0 ? `<small>約${yen(c.pts)}pt／月</small>` : ''}</span><b>${yen(c.m)}円</b></div>`).join('')
-        + `</div></div><div class="note">クレカ積立は1枚あたり月${yen(cap)}円までが一般的です（上限は設定で変えられます）。超えている行は赤くなります。</div>`;
+        + Array.from(S.cards.values()).map((c) => { const cap = capOf(c.acc); const a = accOf(c.acc); return `<div class="r${c.m > cap ? ' over' : ''}"><span>${esc(c.card)}<small class="sub2">${esc(a ? a.name : '')}・上限 月${man(cap)}円${c.pts > 0 ? `・約${yen(c.pts)}pt／月` : ''}${c.m > cap ? `・${man(c.m - cap)}円オーバー` : ''}</small></span><b>${yen(c.m)}円</b></div>`; }).join('')
+        + `</div></div><div class="note">クレカ積立の上限は証券会社ごとに違うので、口座ごとに設定できます（口座の編集から）。超えている行は赤くなります。</div>`;
     }
     // 楽天キャッシュ
     if (S.rcash.m > 0) {
@@ -479,14 +481,14 @@
     const el = $('#setView');
     const s = state.settings;
     el.innerHTML = `<div class="label">口座</div><div class="slist">`
-      + state.accounts.map((a) => `<button class="srow" data-acc="${a.id}"><i style="background:${a.color}"></i><span>${esc(a.name)}</span><small>${state.plans.filter((p) => p.accountId === a.id).length}本 ›</small></button>`).join('')
+      + state.accounts.map((a) => `<button class="srow" data-acc="${a.id}"><i style="background:${a.color}"></i><span>${esc(a.name)}</span><small>${a.cardCap ? 'クレカ上限' + man(a.cardCap) + '・' : ''}${state.plans.filter((p) => p.accountId === a.id).length}本 ›</small></button>`).join('')
       + `<button class="srow link" id="accAdd">＋ 口座を追加</button></div>
       <div class="label">NISA（アプリに入れていない過去の分）</div><div class="slist">
         <label class="srow"><span>生涯枠の利用額<br><small>このアプリに積立として入れていない、過去に買った合計（簿価）</small></span><input inputmode="numeric" id="lifeUsed" value="${s.lifeUsed ? yen(s.lifeUsed) : ''}" placeholder="0" /></label>
         <label class="srow"><span>うち成長投資枠</span><input inputmode="numeric" id="lifeGrowthUsed" value="${s.lifeGrowthUsed ? yen(s.lifeGrowthUsed) : ''}" placeholder="0" /></label>
       </div>
       <div class="label">積立の上限</div><div class="slist">
-        <label class="srow"><span>クレカ1枚あたり（月）</span><input inputmode="numeric" id="cardCap" value="${yen(s.cardCap || 100000)}" /></label>
+        <label class="srow"><span>クレカ1枚あたり（月）<br><small>口座ごとに決めていないときの値</small></span><input inputmode="numeric" id="cardCap" value="${yen(s.cardCap || 100000)}" /></label>
         <label class="srow"><span>楽天キャッシュ（月）</span><input inputmode="numeric" id="rcashCap" value="${yen(s.rcashCap || 50000)}" /></label>
       </div>
       <div class="label">バックアップ</div><div class="slist">
@@ -518,6 +520,7 @@
     const d = acc ? { ...acc } : { id: uid(), name: '', color: COLORS[state.accounts.length % COLORS.length], order: state.accounts.length };
     openSheet(`<h2>${acc ? '口座を編集' : '口座を追加'}</h2>
       <div class="f"><div class="fl">口座の名前</div><input type="text" id="accName" maxlength="20" placeholder="例：楽天証券" value="${esc(d.name)}" /></div>
+      <div class="f"><div class="fl">クレカ積立の上限（月）</div><div class="yen"><input inputmode="numeric" id="accCap" placeholder="${yen(state.settings.cardCap || 100000)}（空欄なら設定の値）" value="${d.cardCap ? yen(d.cardCap) : ''}" /></div><div class="hint">証券会社によって違います（例：月10万円・5万円）。1枚あたりの上限です。</div></div>
       <div class="f"><div class="fl">色</div><div class="colors" id="accColors">${COLORS.map((c) => `<button type="button" data-c="${c}" class="${c === d.color ? 'on' : ''}" style="background:${c}"></button>`).join('')}</div></div>
       <div class="btns"><button class="b-sub" id="sCancel">やめる</button><button class="b-main" id="sSave">保存</button></div>
       ${acc ? '<button class="b-del" id="sDel">この口座を削除</button>' : ''}`);
@@ -525,6 +528,7 @@
     $('#sCancel').onclick = closeSheet;
     $('#sSave').onclick = async () => {
       d.name = $('#accName').value.trim(); if (!d.name) { toast('口座の名前を入れてください'); return; }
+      const cap = toNum($('#accCap').value); if (cap) d.cardCap = cap; else delete d.cardCap;
       d.updatedAt = Date.now(); await put('accounts', d); await loadAll(); closeSheet(); renderAll(); toast('保存しました');
     };
     if (acc) $('#sDel').onclick = async () => {
