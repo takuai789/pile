@@ -47,7 +47,8 @@
   .hero .k { font-size: 13px; color: var(--secondary); font-weight: 700; }
   .hero .big { font-size: 40px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .hero .big small { font-size: 18px; font-weight: 700; margin-left: 2px; }
-  .hero .sub { display: flex; gap: 18px; margin-top: 10px; font-size: 13px; color: var(--secondary); }
+  .hero .sub { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin-top: 12px; font-size: 13px; color: var(--secondary); }
+  .hero .sub > div { white-space: nowrap; }
   .hero .sub b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
   .donut-row { display: flex; align-items: center; gap: 16px; }
   .donut-row svg { width: 120px; height: 120px; flex-shrink: 0; }
@@ -214,7 +215,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -222,7 +223,9 @@
   //         pay:'card'|'cash'|'bridge'|'point', card, rate, paused, order, updatedAt }
   // meta 'settings': { lifeUsed, lifeGrowthUsed, cardCap, rcashCap }
   const COLORS = ['#1F9D74', '#2F7FE0', '#E8962E', '#8B6CF0', '#E5577A', '#2BA9C4', '#6B7A8F'];
-  const FREQ = { monthly: '毎月', weekly: '毎週', daily: '毎日', months: '指定月' };
+  const FREQ = { monthly: '毎月', weekly: '毎週', daily: '毎日', months: '指定月', spot: 'スポット' };
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const ymdLabel = (s) => { if (!s) return '日付なし'; const [y, m, d] = s.split('-').map(Number); return `${y}/${m}/${d}`; };
   const NISA = { tsumitate: 'つみたて投資枠', growth: '成長投資枠', taxable: '課税口座' };
   const NISA_SHORT = { tsumitate: 'つみたて', growth: '成長', taxable: '課税' };
   const PAY = { card: 'クレカ', rcash: '楽天キャッシュ', cash: '現金', bridge: '口座連携', point: 'ポイント' };
@@ -232,8 +235,14 @@
   const LIMIT = { tsumitate: 1200000, growth: 2400000, life: 18000000, lifeGrowth: 12000000 };
 
   // 年額・月額（平均）
-  function yearly(p) {
+  // スポット買付は「積立」の合計には入れない（毎月の額がゆがむため）。NISAの枠には、その年の分として入れる
+  function nisaThisYear(p) {
     if (p.paused) return 0;
+    if (p.freq === 'spot') return p.date && +p.date.slice(0, 4) === new Date().getFullYear() ? (Number(p.amount) || 0) : 0;
+    return yearly(p);
+  }
+  function yearly(p) {
+    if (p.paused || p.freq === 'spot') return 0;
     const a = Number(p.amount) || 0;
     if (p.freq === 'weekly') return a * WEEKS;
     if (p.freq === 'daily') return a * BIZ_DAYS;
@@ -242,6 +251,7 @@
   }
   const monthly = (p) => yearly(p) / 12;
   function freqText(p) {
+    if (p.freq === 'spot') return 'スポット・' + ymdLabel(p.date);
     if (p.freq === 'months') { const m = (p.months || []).slice().sort((x, y) => x - y); return m.length ? m.join('・') + '月' : '月未設定'; }
     return FREQ[p.freq] || '毎月';
   }
@@ -264,11 +274,13 @@
     const byAcc = new Map(), byNisa = { tsumitate: 0, growth: 0, taxable: 0 }, byPay = { card: 0, rcash: 0, cash: 0, bridge: 0, point: 0 };
     const rcash = { m: 0, pts: 0 };
     const cards = new Map(); let points = 0;
+    const spot = { y: 0, n: 0 };
     for (const p of live) {
+      byNisa[p.nisa || 'tsumitate'] += nisaThisYear(p);
+      if (p.freq === 'spot') { const v = nisaThisYear(p); if (v) { spot.y += v; spot.n++; } continue; }
       const y = yearly(p), m = y / 12;
       tot.y += y; tot.m += m;
       byAcc.set(p.accountId, (byAcc.get(p.accountId) || 0) + m);
-      byNisa[p.nisa || 'tsumitate'] += y;
       byPay[p.pay || 'cash'] += m;
       if (p.pay === 'card') {
         const k = (p.card || 'クレカ').trim() || 'クレカ';
@@ -278,7 +290,7 @@
       }
       if (p.pay === 'rcash') { const pt = m * (Number(p.rate) || 0) / 100; rcash.m += m; rcash.pts += pt; points += pt; }
     }
-    return { live, tot, byAcc, byNisa, byPay, cards, rcash, points };
+    return { live, tot, byAcc, byNisa, byPay, cards, rcash, points, spot, n: live.filter((p) => p.freq !== 'spot').length };
   }
 
   // ---------- ぜんたい ----------
@@ -314,11 +326,11 @@
     const S = summary();
     const accParts = state.accounts.map((a) => ({ c: a.color, v: S.byAcc.get(a.id) || 0, n: a.name })).filter((x) => x.v > 0);
     let html = `<div class="card hero"><div class="k">毎月の積立（平均）</div><div class="big">${yen(S.tot.m)}<small>円</small></div>
-      <div class="sub"><div>年間<b>${yen(S.tot.y)}円</b></div><div>積立<b>${S.live.length}本</b></div>${S.points > 0 ? `<div>ポイント／年<b>${yen(S.points * 12)}pt</b></div>` : ''}</div></div>`;
+      <div class="sub"><div>年間<b>${yen(S.tot.y)}円</b></div><div>積立<b>${S.n}本</b></div>${S.spot.n ? `<div>スポット（今年）<b>${yen(S.spot.y)}円</b></div>` : ''}${S.points > 0 ? `<div>ポイント／年<b>${yen(S.points * 12)}pt</b></div>` : ''}</div></div>`;
 
     // 口座ごと
     html += `<div class="label">口座ごと（毎月）</div><div class="card"><div class="donut-row">${donut(accParts)}<div class="legend">`
-      + accParts.map((p) => `<div class="it"><i style="background:${p.c}"></i><span>${esc(p.n)}</span><b>${yen(p.v)}</b><em>${Math.round(p.v / S.tot.m * 100)}%</em></div>`).join('')
+      + accParts.map((p) => `<div class="it"><i style="background:${p.c}"></i><span>${esc(p.n)}</span><b>${yen(p.v)}</b><em>${Math.round(p.v / (S.tot.m || 1) * 100)}%</em></div>`).join('')
       + `</div></div></div>`;
 
     // NISA
@@ -336,7 +348,7 @@
 
     // 払い方
     const payParts = Object.keys(PAY).map((k) => ({ k, v: S.byPay[k] || 0, c: PAY_COLOR[k] })).filter((x) => x.v > 0);
-    html += `<div class="label">払い方（毎月）</div><div class="card"><div class="stack">${payParts.map((p) => `<div style="width:${p.v / S.tot.m * 100}%;background:${p.c}"></div>`).join('')}</div><div class="rows">`
+    html += `<div class="label">払い方（毎月）</div><div class="card"><div class="stack">${payParts.map((p) => `<div style="width:${p.v / (S.tot.m || 1) * 100}%;background:${p.c}"></div>`).join('')}</div><div class="rows">`
       + payParts.map((p) => `<div class="r"><i style="background:${p.c}"></i><span>${PAY[p.k]}</span><b>${yen(p.v)}円</b></div>`).join('') + `</div></div>`;
 
     // クレカごと
@@ -374,7 +386,7 @@
           <div class="a"><span class="nm">${esc(p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(p.amount)}円</span></div>
           <div class="b"><span class="chip">${freqText(p)}</span><span class="chip ${p.nisa === 'growth' ? 'g' : p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[p.nisa] || 'つみたて'}</span>
           <span class="chip">${PAY[p.pay] || '現金'}${p.pay === 'card' && p.card ? '・' + esc(p.card) : ''}</span>${p.paused ? '<span class="chip">停止中</span>' : ''}
-          ${p.freq !== 'monthly' && !p.paused ? `<span class="mo">月平均 ${yen(monthly(p))}円</span>` : ''}</div></button>`).join('') + `</div>`;
+          ${p.freq !== 'monthly' && p.freq !== 'spot' && !p.paused ? `<span class="mo">月平均 ${yen(monthly(p))}円</span>` : ''}</div></button>`).join('') + `</div>`;
       } else html += `<div class="plans"><div class="plan" style="cursor:default;color:var(--tertiary);font-size:14px">まだ積立がありません</div></div>`;
     }
     html += `<button class="add-btn" id="planAdd">＋ 積立を追加</button>`;
@@ -453,8 +465,9 @@
       <div class="f"><div class="fl">口座</div>${segHTML('acc', accOpts, d.accountId)}</div>
       <div class="f"><div class="fl">銘柄</div><input type="text" id="pFund" maxlength="40" placeholder="例：eMAXIS Slim 全世界株式" value="${esc(d.fund)}" /></div>
       <div class="f"><div class="fl">1回の金額</div><div class="yen"><input inputmode="numeric" id="pAmt" placeholder="0" value="${d.amount ? yen(d.amount) : ''}" /></div></div>
-      <div class="f"><div class="fl">頻度</div>${segHTML('freq', FREQ, d.freq)}
+      <div class="f"><div class="fl">頻度（スポットは1回だけの買付）</div>${segHTML('freq', FREQ, d.freq)}
         <div class="months" id="pMonths" style="display:${d.freq === 'months' ? 'grid' : 'none'}">${[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => `<button type="button" data-m="${m}" class="${(d.months || []).includes(m) ? 'on' : ''}">${m}月</button>`).join('')}</div>
+        <div id="pDateBox" style="display:${d.freq === 'spot' ? 'block' : 'none'};margin-top:8px"><input type="date" id="pDate" value="${esc(d.date || today())}" style="width:100%;height:46px;border:0;background:var(--card);border-radius:12px;padding:0 14px;font-size:16px;color:var(--ink);box-shadow:var(--shadow);-webkit-appearance:none;appearance:none" /></div>
         <div class="hint" id="pFreqHint"></div></div>
       <div class="f"><div class="fl">NISAの区分</div>${segHTML('nisa', NISA, d.nisa)}</div>
       <div class="f"><div class="fl">払い方</div>${segHTML('pay', PAY, d.pay)}
@@ -466,10 +479,10 @@
     const hint = () => {
       const a = toNum($('#pAmt').value);
       const tmp = { ...d, amount: a, paused: false };
-      $('#pFreqHint').textContent = a ? `年 ${yen(yearly(tmp))}円・月平均 ${yen(monthly(tmp))}円` + (d.freq === 'daily' ? '（年245営業日で計算）' : d.freq === 'weekly' ? '（年52週で計算）' : '') : '';
+      $('#pFreqHint').textContent = d.freq === 'spot' ? '1回だけの買付です。毎月の積立の合計には入れず、買付日の年のNISA枠に入れます。' : a ? `年 ${yen(yearly(tmp))}円・月平均 ${yen(monthly(tmp))}円` + (d.freq === 'daily' ? '（年245営業日で計算）' : d.freq === 'weekly' ? '（年52週で計算）' : '') : '';
     };
     bindSeg(root, 'acc', (v) => { d.accountId = v; });
-    bindSeg(root, 'freq', (v) => { d.freq = v; $('#pMonths').style.display = v === 'months' ? 'grid' : 'none'; hint(); });
+    bindSeg(root, 'freq', (v) => { d.freq = v; $('#pMonths').style.display = v === 'months' ? 'grid' : 'none'; $('#pDateBox').style.display = v === 'spot' ? 'block' : 'none'; hint(); });
     bindSeg(root, 'nisa', (v) => { d.nisa = v; });
     bindSeg(root, 'pay', (v) => { d.pay = v; $('#pCardBox').style.display = HAS_RATE(v) ? 'block' : 'none'; $('#pCard').style.display = v === 'rcash' ? 'none' : ''; $('#pRcLbl').style.display = v === 'rcash' ? 'flex' : 'none'; if (v === 'rcash' && !$('#pRate').value) $('#pRate').value = '0.5'; });
     $('#pMonths').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; const m = +b.dataset.m; d.months = (d.months || []).includes(m) ? d.months.filter((x) => x !== m) : [...(d.months || []), m]; b.classList.toggle('on'); hint(); };
@@ -483,6 +496,7 @@
       d.amount = toNum(amt.value);
       if (!d.amount) { toast('金額を入れてください'); return; }
       if (d.freq === 'months' && !(d.months || []).length) { toast('積み立てる月を選んでください'); return; }
+      if (d.freq === 'spot') { d.date = $('#pDate').value || today(); } else delete d.date;
       d.fund = $('#pFund').value.trim();
       d.card = d.pay === 'card' ? $('#pCard').value.trim() : '';
       d.rate = HAS_RATE(d.pay) ? (Number(String($('#pRate').value).replace(/[^\d.]/g, '')) || 0) : 0;
