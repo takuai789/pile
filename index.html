@@ -96,6 +96,17 @@
   .ytab td.ov { color: var(--red); font-weight: 800; }
   .ytab .z { color: var(--tertiary); }
   .ytab tr.tap { cursor: pointer; }
+  .seg.ymode { display: grid; grid-template-columns: 1fr 1fr; background: var(--field); border-radius: 10px; padding: 3px; gap: 0; margin: 6px 0 4px; }
+  .seg.ymode button { box-shadow: none; background: none; padding: 7px 0; color: var(--secondary); }
+  .seg.ymode button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+  .ynav { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 12px 0 8px; }
+  .ynav b { font-size: 17px; min-width: 70px; text-align: center; }
+  .ynav button { border: 0; background: var(--card); box-shadow: var(--shadow); width: 36px; height: 36px; border-radius: 50%; font: inherit; font-size: 20px; color: var(--accent); cursor: pointer; }
+  .mtab td { font-size: 13.5px; padding: 9px 5px; }
+  .mtab tfoot td { border-top: 1.5px solid var(--ink); font-weight: 800; }
+  .mk { position: absolute; top: 50%; margin-top: -3px; width: 6px; height: 6px; border-radius: 50%; }
+  .mk.chg { right: 2px; background: #E5577A; }
+  .mk.spot { right: 10px; background: #2F7FE0; }
   .ytab tr.tap:active td { background: var(--field); }
   .ytab td { position: relative; }
   .sp { position: absolute; right: 1px; top: 50%; margin-top: -3px; width: 6px; height: 6px; border-radius: 50%; background: #2F7FE0; }
@@ -211,7 +222,7 @@
   <div class="view" id="setView"></div>
   <nav class="tabbar">
     <button class="on" data-tab="homeView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/></svg>ぜんたい</button>
-    <button data-tab="yearView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg>年ごと</button>
+    <button data-tab="yearView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg>年・月</button>
     <button data-tab="listView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="15" width="16" height="5" rx="2.5"/><rect x="4" y="9.5" width="16" height="5" rx="2.5"/><rect x="4" y="4" width="16" height="5" rx="2.5"/></svg>積立</button>
     <button data-tab="setView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>設定</button>
   </nav>
@@ -248,7 +259,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.7.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -287,19 +298,17 @@
   }
   const nowIdx = () => { const n = new Date(); return n.getFullYear() * 12 + n.getMonth(); };
   const curAmount = (p) => p.freq === 'spot' ? (Number(p.amount) || 0) : amountAt(p, nowIdx());
-  function amountInYear(p, Y) {
+  // その月（m は 1〜12）に入る金額。毎週・毎日は月平均で数える
+  function amountInMonth(p, Y, m) {
     if (p.paused) return 0;
-    if (p.freq === 'spot') return p.date && +p.date.slice(0, 4) === Y ? (Number(p.amount) || 0) : 0;
-    const s = startIdx(p), e = endIdx(p);
-    let sum = 0;
-    for (let m = 0; m < 12; m++) {
-      const k = Y * 12 + m; if (k < s || k > e) continue;
-      const a = amountAt(p, k);
-      if (p.freq === 'months') { if ((p.months || []).includes(m + 1)) sum += a; }
-      else sum += p.freq === 'weekly' ? a * WEEKS / 12 : p.freq === 'daily' ? a * BIZ_DAYS / 12 : a;
-    }
-    return sum;
+    if (p.freq === 'spot') return p.date && +p.date.slice(0, 4) === Y && +p.date.slice(5, 7) === m ? (Number(p.amount) || 0) : 0;
+    const k = Y * 12 + (m - 1);
+    if (k < startIdx(p) || k > endIdx(p)) return 0;
+    const a = amountAt(p, k);
+    if (p.freq === 'months') return (p.months || []).includes(m) ? a : 0;
+    return p.freq === 'weekly' ? a * WEEKS / 12 : p.freq === 'daily' ? a * BIZ_DAYS / 12 : a;
   }
+  function amountInYear(p, Y) { let sum = 0; for (let m = 1; m <= 12; m++) sum += amountInMonth(p, Y, m); return sum; }
   const nisaThisYear = (p) => amountInYear(p, THIS_YEAR);
   // 今動いている積立の年額（毎月の合計などに使う）
   function yearly(p) {
@@ -385,9 +394,62 @@
   }
   // 今年より前（アプリに入っている分）のNISA利用額
   function appNisaBefore(Y) { let v = 0, g = 0; for (const r of yearRows()) if (r.Y < Y && r.Y >= NISA_START) { v += r.t + r.g; g += r.g; } return { v, g }; }
-  function renderYears() {
+  // 年ごと／月ごとの切り替え
+  const modeSeg = () => `<div class="seg ymode" id="ymode"><button type="button" data-v="year" class="${state.ymode !== 'month' ? 'on' : ''}">年ごと</button><button type="button" data-v="month" class="${state.ymode === 'month' ? 'on' : ''}">月ごと</button></div>`;
+  function bindMode(el) { $('#ymode', el).onclick = (e) => { const b = e.target.closest('[data-v]'); if (!b) return; state.ymode = b.dataset.v; $('#navTitle').textContent = state.ymode === 'month' ? '月ごと' : '年ごと'; renderYears(); $('#yearView').scrollTop = 0; }; }
+  function renderMonths() {
     const el = $('#yearView');
-    if (!state.plans.length) { el.innerHTML = `<div class="empty"><b>まだ積立が入っていません</b>「積立」タブで設定を入れると、年ごとの投資額が表になります。</div>`; return; }
+    const Y = state.mYear || THIS_YEAR, nowM = new Date().getMonth() + 1;
+    const live = state.plans.filter((p) => !p.paused && accOf(p.accountId));
+    const m1 = (v) => v ? Math.round(v).toLocaleString('ja-JP') : '<span class="z">–</span>';
+    let html = modeSeg() + `<div class="ynav"><button type="button" id="mPrev">‹</button><b>${Y}年</b><button type="button" id="mNext">›</button></div>`;
+    html += `<div class="card ytab mtab"><table><thead><tr><th>月</th><th>つみたて</th><th>成長</th><th>課税</th><th>合計</th></tr></thead><tbody>`;
+    const tot = { t: 0, g: 0, k: 0 };
+    for (let m = 1; m <= 12; m++) {
+      const r = { t: 0, g: 0, k: 0 }; const marks = [];
+      for (const p of live) {
+        const v = amountInMonth(p, Y, m); if (!v) continue;
+        if (p.nisa === 'growth') r.g += v; else if (p.nisa === 'taxable') r.k += v; else r.t += v;
+        if (p.freq === 'spot') marks.push('spot');
+      }
+      // 金額の変更・開始・終了があった月に印
+      for (const p of live) {
+        if (p.freq === 'spot') continue;
+        const ym = `${Y}-${String(m).padStart(2, '0')}`;
+        if ((p.history || []).some((e) => e.from === ym) || p.start === ym) marks.push('chg');
+      }
+      tot.t += r.t; tot.g += r.g; tot.k += r.k;
+      const sum = r.t + r.g + r.k;
+      const cur = Y === THIS_YEAR && m === nowM;
+      html += `<tr class="tap${cur ? ' cur' : ''}${Y < THIS_YEAR || (Y === THIS_YEAR && m < nowM) ? ' past' : ''}" data-month="${m}"><td>${m}月${marks.includes('chg') ? '<i class="mk chg"></i>' : ''}${marks.includes('spot') ? '<i class="mk spot"></i>' : ''}</td><td>${m1(r.t)}</td><td>${m1(r.g)}</td><td>${m1(r.k)}</td><td><b>${m1(sum)}</b></td></tr>`;
+    }
+    html += `</tbody><tfoot><tr><td>計</td><td>${m1(tot.t)}</td><td>${m1(tot.g)}</td><td>${m1(tot.k)}</td><td><b>${m1(tot.t + tot.g + tot.k)}</b></td></tr></tfoot></table></div>`;
+    html += `<div class="note">単位は円。毎週・毎日の積立は月平均で入れています。<i class="mk chg" style="position:static;display:inline-block;margin:0 2px 1px"></i>は金額の変更・開始がある月、<i class="mk spot" style="position:static;display:inline-block;margin:0 2px 1px"></i>はスポット買付がある月です。月をタップすると中身が見られます。</div>`;
+    el.innerHTML = html;
+    bindMode(el);
+    $('#mPrev').onclick = () => { state.mYear = Y - 1; renderMonths(); };
+    $('#mNext').onclick = () => { state.mYear = Y + 1; renderMonths(); };
+    $$('[data-month]', el).forEach((tr) => tr.onclick = () => openMonthSheet(Y, +tr.dataset.month));
+  }
+  function openMonthSheet(Y, m) {
+    const live = state.plans.filter((p) => !p.paused && accOf(p.accountId));
+    const items = live.map((p) => ({ p, v: amountInMonth(p, Y, m) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+    const sum = items.reduce((s, x) => s + x.v, 0);
+    const ym = `${Y}-${String(m).padStart(2, '0')}`;
+    const chg = live.filter((p) => p.freq !== 'spot' && (p.history || []).some((e) => e.from === ym));
+    openSheet(`<h2>${Y}年${m}月</h2>
+      <div class="card hero" style="margin-bottom:12px"><div class="k">この月の投資額</div><div class="big" style="font-size:30px">${yen(sum)}<small>円</small></div></div>
+      ${chg.length ? `<div class="f"><div class="fl">この月に金額を変えた積立</div><div class="plans">${chg.map((p) => { const e = p.history.find((x) => x.from === ym); return `<div class="plan" style="cursor:default"><div class="a"><span class="nm">${esc(p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(e.prev)} → ${yen(e.amount)}円</span></div></div>`; }).join('')}</div></div>` : ''}
+      <div class="f"><div class="fl">中身</div>${items.length ? `<div class="plans">${items.map((x) => `<button class="plan" data-mp="${x.p.id}"><div class="a"><span class="nm">${esc(x.p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(x.v)}円</span></div><div class="b"><span class="chip">${freqText(x.p)}</span><span class="chip ${x.p.nisa === 'growth' ? 'g' : x.p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[x.p.nisa] || 'つみたて'}</span><span class="chip">${esc(accOf(x.p.accountId).name)}</span></div></button>`).join('')}</div>` : '<div class="note">この月の積立はありません</div>'}</div>
+      <div class="btns" style="grid-template-columns:1fr"><button class="b-sub" id="sCancel">閉じる</button></div>`);
+    $('#sCancel').onclick = closeSheet;
+    $$('[data-mp]', $('#sheet')).forEach((b) => b.onclick = () => { closeSheet(); setTimeout(() => openPlanSheet(state.plans.find((p) => p.id === b.dataset.mp)), 300); });
+  }
+
+  function renderYears() {
+    if (state.ymode === 'month') return renderMonths();
+    const el = $('#yearView');
+    if (!state.plans.length) { el.innerHTML = modeSeg() + `<div class="empty"><b>まだ積立が入っていません</b>「積立」タブで設定を入れると、年ごとの投資額が表になります。</div>`; bindMode(el); return; }
     const rows = yearRows();
     const m1 = (v) => v ? (Math.round(v / 1000) / 10).toLocaleString('ja-JP') : '<span class="z">–</span>';
     let html = `<div class="label" style="margin-top:6px">年ごとの投資額（万円）</div><div class="card ytab"><table><thead><tr><th>年</th><th>つみたて</th><th>成長</th><th>課税</th><th>合計</th><th>NISA累計</th></tr></thead><tbody>`;
@@ -404,7 +466,8 @@
     html += `</tbody></table></div>`;
     html += `<div class="note">${reach ? `今の設定のままだと、NISAの生涯枠（1,800万円）は <b>${reach}年</b> に埋まります。` : 'この表の範囲では、NISAの生涯枠（1,800万円）はまだ埋まりません。'}赤い数字は上限（つみたて120万・成長240万／年、生涯1,800万・うち成長1,200万）を超えている年です。</div>
       <div class="note">来年以降の予定は、積立ごとの「期間」（開始・終了の年月）で入れられます。たとえば「2027年1月から月10万円に増やす」なら、今の積立の終了を2026年12月にして、2027年1月開始の積立を足します。NISA累計は、「設定」で入れたアプリに入れていない過去の利用額（表の一番上の「過去」の行）から積み上げています。</div>`;
-    el.innerHTML = `<div class="note" style="margin:6px 4px 0">今年以降の行をタップすると、その年の成長投資枠のスポット買付の予定を入れられます。<i class="sp" style="position:static;display:inline-block;margin:0 2px 1px"></i>はスポットの予定がある年です。</div>` + html;
+    el.innerHTML = modeSeg() + `<div class="note" style="margin:6px 4px 0">今年以降の行をタップすると、その年の成長投資枠のスポット買付の予定を入れられます。<i class="sp" style="position:static;display:inline-block;margin:0 2px 1px"></i>はスポットの予定がある年です。</div>` + html;
+    bindMode(el);
     $$('[data-year]', el).forEach((tr) => tr.onclick = () => openYearSpotSheet(+tr.dataset.year));
   }
 
@@ -710,7 +773,7 @@
     state.tab = id;
     $$('.view').forEach((v) => v.classList.toggle('on', v.id === id));
     $$('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
-    $('#navTitle').textContent = id === 'homeView' ? 'pile' : id === 'yearView' ? '年ごと' : id === 'listView' ? '積立' : '設定';
+    $('#navTitle').textContent = id === 'homeView' ? 'pile' : id === 'yearView' ? (state.ymode === 'month' ? '月ごと' : '年ごと') : id === 'listView' ? '積立' : '設定';
     const r = $('#navRight');
     r.style.display = id === 'listView' && state.accounts.length ? '' : 'none';
     r.textContent = '＋';
