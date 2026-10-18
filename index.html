@@ -95,6 +95,12 @@
   .ytab tr.past td { color: var(--secondary); }
   .ytab td.ov { color: var(--red); font-weight: 800; }
   .ytab .z { color: var(--tertiary); }
+  .ytab tr.tap { cursor: pointer; }
+  .ytab tr.tap:active td { background: var(--field); }
+  .ytab td { position: relative; }
+  .sp { position: absolute; right: 1px; top: 50%; margin-top: -3px; width: 6px; height: 6px; border-radius: 50%; background: #2F7FE0; }
+  .ytab tr.reach td { box-shadow: inset 0 -2px 0 var(--accent); }
+  .ytab small.rc { display: block; font-size: 9.5px; font-weight: 800; color: var(--accent); line-height: 1; margin-top: 1px; }
   .ytab tr.out td { background: rgba(28,36,33,.035); }
   .ytab tr.out td:first-child small { display: block; font-size: 10px; font-weight: 700; color: var(--tertiary); }
   .note b { color: var(--ink); }
@@ -172,7 +178,7 @@
   .sw.on::after { transform: translateX(20px); }
 
   /* トースト・確認 */
-  .toast { position: fixed; left: 50%; top: calc(var(--app-top, 0px) + var(--safe-top) + 58px); transform: translateX(-50%) translateY(-10px); opacity: 0; pointer-events: none; background: #1C2421; color: #fff; border-radius: 12px; padding: 10px 16px; font-size: 14px; z-index: 90; transition: all .25s; white-space: nowrap; display: flex; gap: 12px; align-items: center; }
+  .toast { position: fixed; left: 50%; top: calc(var(--app-top, 0px) + var(--safe-top) + 58px); transform: translateX(-50%) translateY(-10px); opacity: 0; pointer-events: none; background: #1C2421; color: #fff; border-radius: 12px; padding: 10px 16px; font-size: 14px; z-index: 90; transition: all .25s; white-space: normal; width: max-content; max-width: calc(100vw - 32px); line-height: 1.5; display: flex; gap: 12px; align-items: center; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
   .toast button { border: 0; background: rgba(255,255,255,.16); color: #7EE0BC; font: inherit; font-weight: 700; font-size: 13px; padding: 5px 10px; border-radius: 8px; }
   .toast button:empty { display: none; }
@@ -234,7 +240,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.5.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -369,12 +375,53 @@
     for (const r of rows) {
       const oT = r.t > LIMIT.tsumitate, oG = r.g > LIMIT.growth, oL = r.life > LIMIT.life || r.lifeG > LIMIT.lifeGrowth;
       if (!reach && r.life >= LIMIT.life) reach = r.Y;
-      html += `<tr class="${r.Y === THIS_YEAR ? 'cur' : ''}${r.Y < THIS_YEAR ? ' past' : ''}"><td>${r.Y}</td><td class="${oT ? 'ov' : ''}">${m1(r.t)}</td><td class="${oG ? 'ov' : ''}">${m1(r.g)}</td><td>${m1(r.k)}</td><td><b>${m1(r.sum)}</b></td><td class="${oL ? 'ov' : ''}">${r.Y >= NISA_START ? m1(r.life) : '<span class="z">–</span>'}</td></tr>`;
+      const hasSpot = state.plans.some((p) => !p.paused && p.freq === 'spot' && p.nisa === 'growth' && p.date && +p.date.slice(0, 4) === r.Y && accOf(p.accountId));
+      const reachHere = reach === r.Y;
+      html += `<tr class="${r.Y === THIS_YEAR ? 'cur' : ''}${r.Y < THIS_YEAR ? ' past' : ''}${r.Y >= THIS_YEAR ? ' tap' : ''}${reachHere ? ' reach' : ''}" ${r.Y >= THIS_YEAR ? `data-year="${r.Y}"` : ''}><td>${r.Y}${reachHere ? '<small class="rc">埋まる</small>' : ''}</td><td class="${oT ? 'ov' : ''}">${m1(r.t)}</td><td class="${oG ? 'ov' : ''}">${m1(r.g)}${hasSpot ? '<i class="sp"></i>' : ''}</td><td>${m1(r.k)}</td><td><b>${m1(r.sum)}</b></td><td class="${oL ? 'ov' : ''}">${r.Y >= NISA_START ? m1(r.life) : '<span class="z">–</span>'}</td></tr>`;
     }
     html += `</tbody></table></div>`;
     html += `<div class="note">${reach ? `今の設定のままだと、NISAの生涯枠（1,800万円）は <b>${reach}年</b> に埋まります。` : 'この表の範囲では、NISAの生涯枠（1,800万円）はまだ埋まりません。'}赤い数字は上限（つみたて120万・成長240万／年、生涯1,800万・うち成長1,200万）を超えている年です。</div>
       <div class="note">来年以降の予定は、積立ごとの「期間」（開始・終了の年月）で入れられます。たとえば「2027年1月から月10万円に増やす」なら、今の積立の終了を2026年12月にして、2027年1月開始の積立を足します。NISA累計は、「設定」で入れたアプリに入れていない過去の利用額（表の一番上の「過去」の行）から積み上げています。</div>`;
-    el.innerHTML = html;
+    el.innerHTML = `<div class="note" style="margin:6px 4px 0">今年以降の行をタップすると、その年の成長投資枠のスポット買付の予定を入れられます。<i class="sp" style="position:static;display:inline-block;margin:0 2px 1px"></i>はスポットの予定がある年です。</div>` + html;
+    $$('[data-year]', el).forEach((tr) => tr.onclick = () => openYearSpotSheet(+tr.dataset.year));
+  }
+
+  // 年ごとの表から：その年の成長投資枠スポットを入れる・見る
+  function openYearSpotSheet(Y) {
+    if (!state.accounts.length) { openAccSheet(null); toast('まず口座を登録しましょう'); return; }
+    const list = state.plans.filter((p) => p.freq === 'spot' && p.date && +p.date.slice(0, 4) === Y && accOf(p.accountId));
+    const row = yearRows().find((r) => r.Y === Y) || { g: 0, life: 0 };
+    const growthRoom = Math.max(0, LIMIT.growth - row.g);
+    const lifeRoom = Math.max(0, LIMIT.life - row.life);
+    const accOpts = Object.fromEntries(state.accounts.map((a) => [a.id, esc(a.name)]));
+    let accId = state.accounts[0].id;
+    const dflt = Y === THIS_YEAR ? today() : `${Y}-01-15`;
+    openSheet(`<h2>${Y}年のスポット買付</h2>
+      <div class="f"><div class="fl">${Y}年の成長投資枠</div><div class="card" style="margin:0;padding:12px 14px">
+        ${meterHTML('成長投資枠', row.g, LIMIT.growth, row.g >= LIMIT.growth ? 'この年はもう上限です' : `あと ${man(growthRoom)}円 入れられます`)}
+        <div class="n" style="font-size:12px;color:var(--secondary);margin-top:6px">この年の終わりのNISA累計：${man(row.life)}円（生涯枠まであと ${man(lifeRoom)}円）</div></div></div>
+      ${list.length ? `<div class="f"><div class="fl">入っている予定</div><div class="plans">${list.map((p) => `<button class="plan" data-sp="${p.id}"><div class="a"><span class="nm">${esc(p.fund || 'スポット')}</span><span class="amt">${yen(p.amount)}円</span></div><div class="b"><span class="chip">${ymdLabel(p.date)}</span><span class="chip ${p.nisa === 'growth' ? 'g' : p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[p.nisa] || ''}</span><span class="chip">${esc(accOf(p.accountId).name)}</span></div></button>`).join('')}</div></div>` : ''}
+      <div class="f"><div class="fl">予定を足す（成長投資枠）</div><div class="yen"><input inputmode="numeric" id="ysAmt" placeholder="${growthRoom ? yen(growthRoom) : '0'}" /></div>
+        <div class="seg" style="margin-top:8px">${growthRoom ? `<button type="button" id="ysFill">残り全部（${man(growthRoom)}）</button>` : ''}</div></div>
+      <div class="f"><div class="fl">口座</div>${segHTML('ysacc', accOpts, accId)}</div>
+      <div class="f"><div class="fl">買う日（だいたいでOK）</div><input type="date" id="ysDate" value="${dflt}" class="mon" /></div>
+      <div class="btns"><button class="b-sub" id="sCancel">閉じる</button><button class="b-main" id="ysAdd">予定に入れる</button></div>`);
+    const root = $('#sheet');
+    bindSeg(root, 'ysacc', (v) => { accId = v; });
+    const amt = $('#ysAmt');
+    amt.addEventListener('blur', () => { const v = toNum(amt.value); amt.value = v ? yen(v) : ''; });
+    const fill = $('#ysFill'); if (fill) fill.onclick = () => { amt.value = yen(growthRoom); };
+    $$('[data-sp]', root).forEach((b) => b.onclick = () => { closeSheet(); setTimeout(() => openPlanSheet(state.plans.find((p) => p.id === b.dataset.sp)), 300); });
+    $('#sCancel').onclick = closeSheet;
+    $('#ysAdd').onclick = async () => {
+      const a = toNum(amt.value); if (!a) { toast('金額を入れてください'); return; }
+      const date = $('#ysDate').value || dflt;
+      if (+date.slice(0, 4) !== Y) { toast(Y + '年の日付にしてください'); return; }
+      const p = { id: uid(), accountId: accId, fund: '成長投資枠スポット（予定）', amount: a, freq: 'spot', date, months: [], nisa: 'growth', pay: 'cash', card: '', rate: 0, paused: false, order: state.plans.length, updatedAt: Date.now() };
+      await put('plans', p); await loadAll(); closeSheet(); renderAll();
+      const r = yearRows().find((x) => x.life >= LIMIT.life);
+      toast(`${Y}年に${man(a)}円を入れました` + (r ? `（生涯枠は${r.Y}年に埋まる見込み）` : ''), '取り消す', async () => { await del('plans', p.id); await loadAll(); renderAll(); });
+    };
   }
 
   // ---------- ぜんたい ----------
