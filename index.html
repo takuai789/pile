@@ -214,18 +214,20 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.0.1';
+  const APP_VERSION = '1.1.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
   // plan: { id, accountId, fund, amount, freq:'monthly'|'weekly'|'daily'|'months', months:[1..12], nisa:'tsumitate'|'growth'|'taxable',
   //         pay:'card'|'cash'|'bridge'|'point', card, rate, paused, order, updatedAt }
-  // meta 'settings': { lifeUsed, lifeGrowthUsed, cardCap }
+  // meta 'settings': { lifeUsed, lifeGrowthUsed, cardCap, rcashCap }
   const COLORS = ['#1F9D74', '#2F7FE0', '#E8962E', '#8B6CF0', '#E5577A', '#2BA9C4', '#6B7A8F'];
   const FREQ = { monthly: '毎月', weekly: '毎週', daily: '毎日', months: '指定月' };
   const NISA = { tsumitate: 'つみたて投資枠', growth: '成長投資枠', taxable: '課税口座' };
   const NISA_SHORT = { tsumitate: 'つみたて', growth: '成長', taxable: '課税' };
-  const PAY = { card: 'クレカ', cash: '現金', bridge: '口座連携', point: 'ポイント' };
+  const PAY = { card: 'クレカ', rcash: '楽天キャッシュ', cash: '現金', bridge: '口座連携', point: 'ポイント' };
+  const PAY_COLOR = { card: '#1F9D74', rcash: '#BF0000', cash: '#6B7A8F', bridge: '#2F7FE0', point: '#E8962E' };
+  const HAS_RATE = (pay) => pay === 'card' || pay === 'rcash'; // 還元率を入れる払い方
   const BIZ_DAYS = 245, WEEKS = 52; // 年間の営業日・週の目安
   const LIMIT = { tsumitate: 1200000, growth: 2400000, life: 18000000, lifeGrowth: 12000000 };
 
@@ -245,7 +247,7 @@
   }
 
   // ---------- 状態 ----------
-  const state = { accounts: [], plans: [], settings: { lifeUsed: 0, lifeGrowthUsed: 0, cardCap: 100000 }, tab: 'homeView' };
+  const state = { accounts: [], plans: [], settings: { lifeUsed: 0, lifeGrowthUsed: 0, cardCap: 100000, rcashCap: 50000 }, tab: 'homeView' };
   async function loadAll() {
     state.accounts = (await getAll('accounts')).sort((a, b) => (a.order || 0) - (b.order || 0));
     state.plans = (await getAll('plans')).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -259,7 +261,8 @@
   function summary() {
     const live = state.plans.filter((p) => !p.paused && accOf(p.accountId));
     const tot = { m: 0, y: 0 };
-    const byAcc = new Map(), byNisa = { tsumitate: 0, growth: 0, taxable: 0 }, byPay = { card: 0, cash: 0, bridge: 0, point: 0 };
+    const byAcc = new Map(), byNisa = { tsumitate: 0, growth: 0, taxable: 0 }, byPay = { card: 0, rcash: 0, cash: 0, bridge: 0, point: 0 };
+    const rcash = { m: 0, pts: 0 };
     const cards = new Map(); let points = 0;
     for (const p of live) {
       const y = yearly(p), m = y / 12;
@@ -273,8 +276,9 @@
         c.m += m; c.pts += m * (Number(p.rate) || 0) / 100; cards.set(k, c);
         points += m * (Number(p.rate) || 0) / 100;
       }
+      if (p.pay === 'rcash') { const pt = m * (Number(p.rate) || 0) / 100; rcash.m += m; rcash.pts += pt; points += pt; }
     }
-    return { live, tot, byAcc, byNisa, byPay, cards, points };
+    return { live, tot, byAcc, byNisa, byPay, cards, rcash, points };
   }
 
   // ---------- ぜんたい ----------
@@ -331,7 +335,7 @@
     if (S.byNisa.taxable > 0) html += `<div class="note">課税口座（特定・一般）の積立：年${yen(S.byNisa.taxable)}円</div>`;
 
     // 払い方
-    const payParts = Object.keys(PAY).map((k, i) => ({ k, v: S.byPay[k], c: ['#1F9D74', '#6B7A8F', '#2F7FE0', '#E8962E'][i] })).filter((x) => x.v > 0);
+    const payParts = Object.keys(PAY).map((k) => ({ k, v: S.byPay[k] || 0, c: PAY_COLOR[k] })).filter((x) => x.v > 0);
     html += `<div class="label">払い方（毎月）</div><div class="card"><div class="stack">${payParts.map((p) => `<div style="width:${p.v / S.tot.m * 100}%;background:${p.c}"></div>`).join('')}</div><div class="rows">`
       + payParts.map((p) => `<div class="r"><i style="background:${p.c}"></i><span>${PAY[p.k]}</span><b>${yen(p.v)}円</b></div>`).join('') + `</div></div>`;
 
@@ -341,6 +345,13 @@
       html += `<div class="label">クレカ積立（毎月）</div><div class="card"><div class="rows">`
         + Array.from(S.cards.entries()).map(([k, c]) => `<div class="r${c.m > cap ? ' over' : ''}"><span>${esc(k)}${c.pts > 0 ? `<small>約${yen(c.pts)}pt／月</small>` : ''}</span><b>${yen(c.m)}円</b></div>`).join('')
         + `</div></div><div class="note">クレカ積立は1枚あたり月${yen(cap)}円までが一般的です（上限は設定で変えられます）。超えている行は赤くなります。</div>`;
+    }
+    // 楽天キャッシュ
+    if (S.rcash.m > 0) {
+      const rc = Number(state.settings.rcashCap) || 50000;
+      html += `<div class="label">楽天キャッシュ積立（毎月）</div><div class="card"><div class="rows"><div class="r${S.rcash.m > rc ? ' over' : ''}"><span>楽天キャッシュ${S.rcash.pts > 0 ? `<small>約${yen(S.rcash.pts)}pt／月</small>` : ''}</span><b>${yen(S.rcash.m)}円</b></div></div>`
+        + meterHTML('上限まで', S.rcash.m, rc, S.rcash.m > rc ? `月${yen(S.rcash.m - rc)}円オーバー` : S.rcash.m === rc ? 'ちょうど上限まで使っています' : `あと月${yen(rc - S.rcash.m)}円入れられます`).replace('万</b>', '万</b>')
+        + `</div><div class="note">楽天キャッシュ積立は月${yen(rc)}円までです（上限は設定で変えられます）。還元率は楽天カードからチャージしたときの分を入れてください。</div>`;
     }
     el.innerHTML = html;
   }
@@ -383,8 +394,9 @@
         <label class="srow"><span>生涯枠の利用額<br><small>去年までに買った合計（簿価）</small></span><input inputmode="numeric" id="lifeUsed" value="${s.lifeUsed ? yen(s.lifeUsed) : ''}" placeholder="0" /></label>
         <label class="srow"><span>うち成長投資枠</span><input inputmode="numeric" id="lifeGrowthUsed" value="${s.lifeGrowthUsed ? yen(s.lifeGrowthUsed) : ''}" placeholder="0" /></label>
       </div>
-      <div class="label">クレカ積立</div><div class="slist">
-        <label class="srow"><span>1枚あたりの上限（月）</span><input inputmode="numeric" id="cardCap" value="${yen(s.cardCap || 100000)}" /></label>
+      <div class="label">積立の上限</div><div class="slist">
+        <label class="srow"><span>クレカ1枚あたり（月）</span><input inputmode="numeric" id="cardCap" value="${yen(s.cardCap || 100000)}" /></label>
+        <label class="srow"><span>楽天キャッシュ（月）</span><input inputmode="numeric" id="rcashCap" value="${yen(s.rcashCap || 50000)}" /></label>
       </div>
       <div class="label">バックアップ</div><div class="slist">
         <button class="srow link" id="exportBtn">データを書き出す（バックアップ）</button>
@@ -393,9 +405,9 @@
       <div id="versionLabel">v${APP_VERSION}</div>`;
     $$('[data-acc]', el).forEach((b) => b.onclick = () => openAccSheet(accOf(b.dataset.acc)));
     $('#accAdd').onclick = () => openAccSheet(null);
-    for (const k of ['lifeUsed', 'lifeGrowthUsed', 'cardCap']) {
+    for (const k of ['lifeUsed', 'lifeGrowthUsed', 'cardCap', 'rcashCap']) {
       const inp = $('#' + k);
-      inp.addEventListener('change', async () => { state.settings[k] = toNum(inp.value); if (k === 'cardCap' && !state.settings.cardCap) state.settings.cardCap = 100000; await saveSettings(); inp.value = state.settings[k] ? yen(state.settings[k]) : ''; toast('保存しました'); });
+      inp.addEventListener('change', async () => { state.settings[k] = toNum(inp.value); if (k === 'cardCap' && !state.settings.cardCap) state.settings.cardCap = 100000; if (k === 'rcashCap' && !state.settings.rcashCap) state.settings.rcashCap = 50000; await saveSettings(); inp.value = state.settings[k] ? yen(state.settings[k]) : ''; toast('保存しました'); });
     }
     $('#exportBtn').onclick = exportData;
     $('#importBtn').onclick = () => $('#importFile').click();
@@ -446,7 +458,7 @@
         <div class="hint" id="pFreqHint"></div></div>
       <div class="f"><div class="fl">NISAの区分</div>${segHTML('nisa', NISA, d.nisa)}</div>
       <div class="f"><div class="fl">払い方</div>${segHTML('pay', PAY, d.pay)}
-        <div id="pCardBox" style="display:${d.pay === 'card' ? 'block' : 'none'};margin-top:8px"><div class="two"><input type="text" id="pCard" maxlength="20" placeholder="カード名（例：楽天カード）" value="${esc(d.card)}" /><div class="pct"><input inputmode="decimal" id="pRate" placeholder="還元率" value="${d.rate || ''}" /></div></div></div></div>
+        <div id="pCardBox" style="display:${HAS_RATE(d.pay) ? 'block' : 'none'};margin-top:8px"><div class="two" id="pCardTwo" style="${d.pay === 'rcash' ? 'grid-template-columns:1fr 110px' : ''}"><input type="text" id="pCard" maxlength="20" placeholder="カード名（例：楽天カード）" value="${esc(d.card)}" style="${d.pay === 'rcash' ? 'display:none' : ''}" /><div id="pRcLbl" style="display:${d.pay === 'rcash' ? 'flex' : 'none'};align-items:center;font-size:13.5px;font-weight:700;color:var(--secondary);padding-left:4px">楽天カードからのチャージ還元率</div><div class="pct"><input inputmode="decimal" id="pRate" placeholder="還元率" value="${d.rate || ''}" /></div></div></div></div>
       <div class="f"><div class="toggle"><span>一時停止中<small>合計には入れません</small></span><button type="button" class="sw${d.paused ? ' on' : ''}" id="pPause"></button></div></div>
       <div class="btns"><button class="b-sub" id="sCancel">やめる</button><button class="b-main" id="sSave">保存</button></div>
       ${plan ? '<button class="b-del" id="sDel">この積立を削除</button>' : ''}`);
@@ -459,7 +471,7 @@
     bindSeg(root, 'acc', (v) => { d.accountId = v; });
     bindSeg(root, 'freq', (v) => { d.freq = v; $('#pMonths').style.display = v === 'months' ? 'grid' : 'none'; hint(); });
     bindSeg(root, 'nisa', (v) => { d.nisa = v; });
-    bindSeg(root, 'pay', (v) => { d.pay = v; $('#pCardBox').style.display = v === 'card' ? 'block' : 'none'; });
+    bindSeg(root, 'pay', (v) => { d.pay = v; $('#pCardBox').style.display = HAS_RATE(v) ? 'block' : 'none'; $('#pCard').style.display = v === 'rcash' ? 'none' : ''; $('#pRcLbl').style.display = v === 'rcash' ? 'flex' : 'none'; if (v === 'rcash' && !$('#pRate').value) $('#pRate').value = '0.5'; });
     $('#pMonths').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; const m = +b.dataset.m; d.months = (d.months || []).includes(m) ? d.months.filter((x) => x !== m) : [...(d.months || []), m]; b.classList.toggle('on'); hint(); };
     const amt = $('#pAmt');
     amt.addEventListener('input', hint);
@@ -473,7 +485,7 @@
       if (d.freq === 'months' && !(d.months || []).length) { toast('積み立てる月を選んでください'); return; }
       d.fund = $('#pFund').value.trim();
       d.card = d.pay === 'card' ? $('#pCard').value.trim() : '';
-      d.rate = d.pay === 'card' ? (Number(String($('#pRate').value).replace(/[^\d.]/g, '')) || 0) : 0;
+      d.rate = HAS_RATE(d.pay) ? (Number(String($('#pRate').value).replace(/[^\d.]/g, '')) || 0) : 0;
       d.updatedAt = Date.now();
       await put('plans', d); await loadAll(); closeSheet(); renderAll(); toast(plan ? '保存しました' : '追加しました');
     };
