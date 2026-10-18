@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="pile" />
+<meta name="theme-color" content="#F2F6F4" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-v1-192.png" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231F9D74'/%3E%3Crect x='26' y='62' width='48' height='14' rx='7' fill='%23fff'/%3E%3Crect x='26' y='44' width='48' height='14' rx='7' fill='%23fff' opacity='.82'/%3E%3Crect x='26' y='26' width='48' height='14' rx='7' fill='%23fff' opacity='.62'/%3E%3C/svg%3E" />
+<title>pile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #F2F6F4; --card: #FFFFFF; --field: #E6EFEB;
+    --ink: #1C2421; --secondary: rgba(28,36,33,0.56); --tertiary: rgba(28,36,33,0.34); --sep: rgba(28,36,33,0.08);
+    --accent: #1F9D74; --accent-soft: rgba(31,157,116,0.12);
+    --warn: #D9822B; --red: #E5484D;
+    --shadow: 0 1px 2px rgba(20,30,25,0.06);
+    --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: 'M PLUS 1p', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; color: var(--ink); font-size: 16px; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
+  input, select { font: inherit; }
+  /* iPhoneでキーボードが出ても画面がずれないよう、見えている範囲にぴったり固定する（CLAUDE.md「iPhoneの定石」） */
+  #app { position: fixed; left: 0; right: 0; top: var(--app-top, 0px); height: var(--app-height, 100%); display: flex; flex-direction: column; padding-top: var(--safe-top); max-width: 640px; margin: 0 auto; }
+  .nav { height: 52px; display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
+  .nav h1 { font-size: 18px; font-weight: 800; letter-spacing: .04em; }
+  .nav .r { position: absolute; right: 10px; top: 8px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 15px; font-weight: 700; padding: 8px 8px; cursor: pointer; }
+  .view { display: none; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 16px 24px; }
+  .view.on { display: block; }
+  .tabbar { flex-shrink: 0; display: flex; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: .5px solid var(--sep); padding-bottom: var(--safe-bottom); }
+  .tabbar button { flex: 1; border: 0; background: none; padding: 8px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; font: inherit; font-size: 10.5px; font-weight: 700; color: var(--tertiary); cursor: pointer; }
+  .tabbar button.on { color: var(--accent); }
+  .tabbar svg { width: 24px; height: 24px; }
+
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .label { font-size: 12px; font-weight: 700; color: var(--secondary); margin: 18px 4px 8px; letter-spacing: .02em; }
+  .label:first-child { margin-top: 6px; }
+  .hero .k { font-size: 13px; color: var(--secondary); font-weight: 700; }
+  .hero .big { font-size: 40px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .hero .big small { font-size: 18px; font-weight: 700; margin-left: 2px; }
+  .hero .sub { display: flex; gap: 18px; margin-top: 10px; font-size: 13px; color: var(--secondary); }
+  .hero .sub b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .donut-row { display: flex; align-items: center; gap: 16px; }
+  .donut-row svg { width: 120px; height: 120px; flex-shrink: 0; }
+  .legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .legend .it { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .legend .it i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .legend .it span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend .it b { font-variant-numeric: tabular-nums; font-size: 14px; }
+  .legend .it em { font-style: normal; font-size: 11px; color: var(--tertiary); width: 34px; text-align: right; }
+  .stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--field); margin: 4px 0 10px; }
+  .stack div { height: 100%; }
+  .rows .r { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 14px; border-top: .5px solid var(--sep); }
+  .rows .r:first-child { border-top: 0; }
+  .rows .r i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .rows .r span { flex: 1; min-width: 0; }
+  .rows .r small { color: var(--tertiary); font-size: 11.5px; margin-left: 4px; }
+  .rows .r b { font-variant-numeric: tabular-nums; }
+  .rows .r.over b, .rows .r.over span { color: var(--red); }
+  .meter { margin-top: 12px; }
+  .meter:first-of-type { margin-top: 2px; }
+  .meter .t { display: flex; align-items: baseline; gap: 6px; font-size: 14px; font-weight: 700; }
+  .meter .t span { flex: 1; }
+  .meter .t b { font-variant-numeric: tabular-nums; }
+  .meter .t small { font-size: 12px; color: var(--secondary); font-weight: 500; }
+  .meter .bar { height: 10px; border-radius: 5px; background: var(--field); overflow: hidden; margin: 6px 0 4px; }
+  .meter .bar div { height: 100%; background: var(--accent); border-radius: 5px; }
+  .meter.over .bar div { background: var(--red); }
+  .meter .n { font-size: 12px; color: var(--secondary); line-height: 1.6; }
+  .meter.over .n { color: var(--red); font-weight: 700; }
+  .note { font-size: 12px; color: var(--secondary); line-height: 1.7; margin: 6px 4px 0; }
+  .empty { text-align: center; color: var(--secondary); font-size: 14px; line-height: 1.9; padding: 40px 10px; }
+  .empty b { display: block; font-size: 17px; color: var(--ink); margin-bottom: 4px; }
+
+  /* 積立一覧 */
+  .acc-h { display: flex; align-items: center; gap: 8px; margin: 18px 4px 8px; }
+  .acc-h:first-child { margin-top: 6px; }
+  .acc-h i { width: 10px; height: 10px; border-radius: 3px; }
+  .acc-h b { font-size: 14px; flex: 1; }
+  .acc-h span { font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+  .plans { background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+  .plan { display: block; width: 100%; text-align: left; border: 0; background: none; font: inherit; color: inherit; padding: 13px 16px; cursor: pointer; }
+  .plan + .plan { border-top: .5px solid var(--sep); }
+  .plan .a { display: flex; align-items: baseline; gap: 10px; }
+  .plan .a .nm { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; line-height: 1.4; }
+  .plan .a .amt { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .plan .b { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }
+  .chip { font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; background: var(--field); color: var(--secondary); }
+  .chip.t { background: rgba(31,157,116,.13); color: #157A59; }
+  .chip.g { background: rgba(47,127,224,.13); color: #2366B5; }
+  .chip.k { background: rgba(28,36,33,.07); color: var(--secondary); }
+  .plan .b .mo { margin-left: auto; font-size: 12px; color: var(--tertiary); }
+  .plan.paused { opacity: .45; }
+  .add-btn { display: block; width: 100%; margin-top: 14px; border: 1.5px dashed var(--tertiary); background: none; border-radius: 14px; padding: 14px; font: inherit; font-size: 15px; font-weight: 700; color: var(--secondary); cursor: pointer; }
+
+  /* 設定 */
+  .slist { background: var(--card); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 13px 16px; width: 100%; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .srow + .srow { border-top: .5px solid var(--sep); }
+  .srow i { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+  .srow span { flex: 1; min-width: 0; }
+  .srow small { font-size: 12px; color: var(--secondary); }
+  .srow.link { color: var(--accent); font-weight: 700; }
+  .srow input { width: 130px; text-align: right; border: 0; background: var(--field); border-radius: 8px; padding: 7px 10px; font-size: 16px; color: var(--ink); outline: none; }
+  #versionLabel { text-align: center; font-size: 12px; color: var(--tertiary); margin-top: 18px; }
+
+  /* シート */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(20,30,25,.32); display: none; z-index: 60; }
+  .sheet-bg.show { display: block; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto; max-height: calc(var(--app-height, 100vh) - 30px); overflow-y: auto; background: var(--bg); border-radius: 20px 20px 0 0; padding: 16px 16px calc(var(--safe-bottom) + 18px); z-index: 61; transform: translateY(105%); transition: transform .28s cubic-bezier(.32,.72,0,1); }
+  .sheet.show { transform: translateY(0); }
+  .sheet h2 { font-size: 17px; text-align: center; margin-bottom: 14px; }
+  .f { margin-bottom: 14px; }
+  .f > .fl { font-size: 12px; font-weight: 700; color: var(--secondary); margin: 0 4px 6px; }
+  .f input[type=text], .f input[type=number], .f input[inputmode] { width: 100%; height: 46px; border: 0; background: var(--card); border-radius: 12px; padding: 0 14px; font-size: 16px; color: var(--ink); outline: none; box-shadow: var(--shadow); }
+  .f input:focus { box-shadow: 0 0 0 2px var(--accent); }
+  .yen { position: relative; }
+  .yen::after { content: '円'; position: absolute; right: 14px; top: 13px; font-size: 15px; color: var(--secondary); pointer-events: none; }
+  .yen input { padding-right: 36px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 10px; padding: 9px 13px; font: inherit; font-size: 14px; font-weight: 700; color: var(--secondary); cursor: pointer; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .months { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
+  .months button { border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 8px; padding: 8px 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--secondary); }
+  .months button.on { background: var(--accent); color: #fff; }
+  .two { display: grid; grid-template-columns: 1fr 110px; gap: 8px; }
+  .pct { position: relative; }
+  .pct::after { content: '%'; position: absolute; right: 14px; top: 13px; color: var(--secondary); pointer-events: none; }
+  .hint { font-size: 12px; color: var(--secondary); margin: 6px 4px 0; line-height: 1.6; }
+  .sheet .btns { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 6px; }
+  .sheet .btns button { border: 0; border-radius: 14px; padding: 14px; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
+  .b-sub { background: var(--field); color: var(--ink); }
+  .b-main { background: var(--accent); color: #fff; }
+  .b-main:disabled { opacity: .4; }
+  .b-del { display: block; width: 100%; margin-top: 10px; border: 0; background: none; color: var(--red); font: inherit; font-size: 14px; font-weight: 700; padding: 10px; }
+  .colors { display: flex; gap: 8px; flex-wrap: wrap; }
+  .colors button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
+  .colors button.on { border-color: var(--ink); }
+  .toggle { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .toggle span { flex: 1; font-size: 15px; font-weight: 700; }
+  .toggle small { display: block; font-size: 12px; color: var(--secondary); font-weight: 500; }
+  .sw { width: 50px; height: 30px; border-radius: 15px; background: var(--field); border: 0; position: relative; flex-shrink: 0; cursor: pointer; }
+  .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  .sw.on { background: var(--accent); }
+  .sw.on::after { transform: translateX(20px); }
+
+  /* トースト・確認 */
+  .toast { position: fixed; left: 50%; top: calc(var(--app-top, 0px) + var(--safe-top) + 58px); transform: translateX(-50%) translateY(-10px); opacity: 0; pointer-events: none; background: #1C2421; color: #fff; border-radius: 12px; padding: 10px 16px; font-size: 14px; z-index: 90; transition: all .25s; white-space: nowrap; display: flex; gap: 12px; align-items: center; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .toast button { border: 0; background: rgba(255,255,255,.16); color: #7EE0BC; font: inherit; font-weight: 700; font-size: 13px; padding: 5px 10px; border-radius: 8px; }
+  .toast button:empty { display: none; }
+  .ask-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 95; padding: 24px; }
+  .ask-bg.show { display: flex; }
+  .ask { background: var(--card); border-radius: 16px; padding: 20px 18px 14px; max-width: 320px; width: 100%; text-align: center; }
+  .ask p { font-size: 15px; line-height: 1.7; margin-bottom: 16px; white-space: pre-line; }
+  .ask div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ask button { border: 0; border-radius: 10px; padding: 11px; font: inherit; font-size: 15px; font-weight: 700; background: var(--field); color: var(--ink); }
+  .ask button.d { background: var(--red); color: #fff; }
+
+  #updateBanner { position: fixed; left: 12px; right: 12px; bottom: calc(var(--safe-bottom) + 70px); z-index: 1000; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: #fff; border: 0; border-radius: 14px; padding: 14px 18px; font: inherit; font-size: 14px; font-weight: 700; box-shadow: 0 8px 28px rgba(0,0,0,.2); cursor: pointer; transform: translateY(200%); transition: transform .35s cubic-bezier(.32,.72,0,1); }
+  #updateBanner.show { transform: translateY(0); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="nav"><h1 id="navTitle">pile</h1><button class="r" id="navRight" style="display:none"></button></div>
+  <div class="view on" id="homeView"></div>
+  <div class="view" id="listView"></div>
+  <div class="view" id="setView"></div>
+  <nav class="tabbar">
+    <button class="on" data-tab="homeView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/></svg>ぜんたい</button>
+    <button data-tab="listView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="15" width="16" height="5" rx="2.5"/><rect x="4" y="9.5" width="16" height="5" rx="2.5"/><rect x="4" y="4" width="16" height="5" rx="2.5"/></svg>積立</button>
+    <button data-tab="setView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>設定</button>
+  </nav>
+</div>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"><span></span><button></button></div>
+<div class="ask-bg" id="askBg"><div class="ask"><p id="askMsg"></p><div><button id="askNo">やめる</button><button class="d" id="askYes">削除する</button></div></div></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden />
+
+<script>
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const yen = (n) => Math.round(n).toLocaleString('ja-JP');
+  const man = (n) => { const v = n / 10000; return (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('ja-JP') + '万'; };
+
+  // ---------- IndexedDB（DB名は変えない） ----------
+  const DB_NAME = 'pile-db', DB_VERSION = 1, STORES = ['accounts', 'plans', 'meta'];
+  let _db = null;
+  function openDB() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open(DB_NAME, DB_VERSION);
+      r.onupgradeneeded = () => { for (const s of STORES) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); };
+      r.onsuccess = () => { _db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  }
+  const tx = (s, m = 'readonly') => _db.transaction(s, m).objectStore(s);
+  const getAll = (s) => new Promise((res, rej) => { const r = tx(s).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const put = (s, v) => new Promise((res, rej) => { const r = tx(s, 'readwrite').put(v); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+
+  // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
+  const APP_VERSION = '1.0.0';
+
+  // ---------- 定数 ----------
+  // account: { id, name, color, order, updatedAt }
+  // plan: { id, accountId, fund, amount, freq:'monthly'|'weekly'|'daily'|'months', months:[1..12], nisa:'tsumitate'|'growth'|'taxable',
+  //         pay:'card'|'cash'|'bridge'|'point', card, rate, paused, order, updatedAt }
+  // meta 'settings': { lifeUsed, lifeGrowthUsed, cardCap }
+  const COLORS = ['#1F9D74', '#2F7FE0', '#E8962E', '#8B6CF0', '#E5577A', '#2BA9C4', '#6B7A8F'];
+  const FREQ = { monthly: '毎月', weekly: '毎週', daily: '毎日', months: '指定月' };
+  const NISA = { tsumitate: 'つみたて投資枠', growth: '成長投資枠', taxable: '課税口座' };
+  const NISA_SHORT = { tsumitate: 'つみたて', growth: '成長', taxable: '課税' };
+  const PAY = { card: 'クレカ', cash: '現金', bridge: '口座連携', point: 'ポイント' };
+  const BIZ_DAYS = 245, WEEKS = 52; // 年間の営業日・週の目安
+  const LIMIT = { tsumitate: 1200000, growth: 2400000, life: 18000000, lifeGrowth: 12000000 };
+
+  // 年額・月額（平均）
+  function yearly(p) {
+    if (p.paused) return 0;
+    const a = Number(p.amount) || 0;
+    if (p.freq === 'weekly') return a * WEEKS;
+    if (p.freq === 'daily') return a * BIZ_DAYS;
+    if (p.freq === 'months') return a * (p.months || []).length;
+    return a * 12;
+  }
+  const monthly = (p) => yearly(p) / 12;
+  function freqText(p) {
+    if (p.freq === 'months') { const m = (p.months || []).slice().sort((x, y) => x - y); return m.length ? m.join('・') + '月' : '月未設定'; }
+    return FREQ[p.freq] || '毎月';
+  }
+
+  // ---------- 状態 ----------
+  const state = { accounts: [], plans: [], settings: { lifeUsed: 0, lifeGrowthUsed: 0, cardCap: 100000 }, tab: 'homeView' };
+  async function loadAll() {
+    state.accounts = (await getAll('accounts')).sort((a, b) => (a.order || 0) - (b.order || 0));
+    state.plans = (await getAll('plans')).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const s = (await getAll('meta')).find((x) => x.id === 'settings');
+    if (s) Object.assign(state.settings, s);
+  }
+  const accOf = (id) => state.accounts.find((a) => a.id === id);
+  const saveSettings = () => put('meta', Object.assign({ id: 'settings', updatedAt: Date.now() }, state.settings));
+
+  // ---------- 集計 ----------
+  function summary() {
+    const live = state.plans.filter((p) => !p.paused && accOf(p.accountId));
+    const tot = { m: 0, y: 0 };
+    const byAcc = new Map(), byNisa = { tsumitate: 0, growth: 0, taxable: 0 }, byPay = { card: 0, cash: 0, bridge: 0, point: 0 };
+    const cards = new Map(); let points = 0;
+    for (const p of live) {
+      const y = yearly(p), m = y / 12;
+      tot.y += y; tot.m += m;
+      byAcc.set(p.accountId, (byAcc.get(p.accountId) || 0) + m);
+      byNisa[p.nisa || 'tsumitate'] += y;
+      byPay[p.pay || 'cash'] += m;
+      if (p.pay === 'card') {
+        const k = (p.card || 'クレカ').trim() || 'クレカ';
+        const c = cards.get(k) || { m: 0, pts: 0 };
+        c.m += m; c.pts += m * (Number(p.rate) || 0) / 100; cards.set(k, c);
+        points += m * (Number(p.rate) || 0) / 100;
+      }
+    }
+    return { live, tot, byAcc, byNisa, byPay, cards, points };
+  }
+
+  // ---------- ぜんたい ----------
+  function donut(parts) {
+    const total = parts.reduce((s, p) => s + p.v, 0);
+    if (!total) return '<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="44" fill="none" stroke="var(--field)" stroke-width="18"/></svg>';
+    let a = -Math.PI / 2, out = '';
+    const R = 44;
+    for (const p of parts) {
+      if (!p.v) continue;
+      const da = p.v / total * Math.PI * 2;
+      if (da >= Math.PI * 2 - 1e-6) { out += `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${p.c}" stroke-width="18"/>`; break; }
+      const x1 = 60 + R * Math.cos(a), y1 = 60 + R * Math.sin(a), x2 = 60 + R * Math.cos(a + da), y2 = 60 + R * Math.sin(a + da);
+      out += `<path d="M${x1.toFixed(2)} ${y1.toFixed(2)}A${R} ${R} 0 ${da > Math.PI ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" fill="none" stroke="${p.c}" stroke-width="18"/>`;
+      a += da;
+    }
+    return `<svg viewBox="0 0 120 120">${out}</svg>`;
+  }
+  function meterHTML(title, used, limit, note) {
+    const pct = limit ? Math.min(100, used / limit * 100) : 0;
+    const over = used > limit;
+    return `<div class="meter${over ? ' over' : ''}"><div class="t"><span>${title}</span><b>${man(used)}</b><small>／ ${man(limit)}円</small></div>
+      <div class="bar"><div style="width:${pct}%"></div></div><div class="n">${note}</div></div>`;
+  }
+  function renderHome() {
+    const el = $('#homeView');
+    if (!state.plans.length) {
+      el.innerHTML = `<div class="empty"><b>まだ積立が入っていません</b>「積立」タブから、口座と積立の設定を入れると<br>毎月いくら・どこに積み立てているかが一目でわかります。</div>
+        <button class="add-btn" id="homeAdd">＋ 積立を追加</button>`;
+      $('#homeAdd').onclick = () => openPlanSheet(null);
+      return;
+    }
+    const S = summary();
+    const accParts = state.accounts.map((a) => ({ c: a.color, v: S.byAcc.get(a.id) || 0, n: a.name })).filter((x) => x.v > 0);
+    let html = `<div class="card hero"><div class="k">毎月の積立（平均）</div><div class="big">${yen(S.tot.m)}<small>円</small></div>
+      <div class="sub"><div>年間<b>${yen(S.tot.y)}円</b></div><div>積立<b>${S.live.length}本</b></div>${S.points > 0 ? `<div>ポイント／年<b>${yen(S.points * 12)}pt</b></div>` : ''}</div></div>`;
+
+    // 口座ごと
+    html += `<div class="label">口座ごと（毎月）</div><div class="card"><div class="donut-row">${donut(accParts)}<div class="legend">`
+      + accParts.map((p) => `<div class="it"><i style="background:${p.c}"></i><span>${esc(p.n)}</span><b>${yen(p.v)}</b><em>${Math.round(p.v / S.tot.m * 100)}%</em></div>`).join('')
+      + `</div></div></div>`;
+
+    // NISA
+    const y = new Date().getFullYear();
+    const ts = S.byNisa.tsumitate, gr = S.byNisa.growth;
+    const lifeUsed = Number(state.settings.lifeUsed) || 0, lifeG = Number(state.settings.lifeGrowthUsed) || 0;
+    const lifeAfter = lifeUsed + ts + gr, lifeGAfter = lifeG + gr;
+    html += `<div class="label">NISAの枠（${y}年・今の設定を1年続けた場合）</div><div class="card">`
+      + meterHTML('つみたて投資枠', ts, LIMIT.tsumitate, ts > LIMIT.tsumitate ? `年${man(ts - LIMIT.tsumitate)}円オーバー。設定を見直しましょう` : ts === LIMIT.tsumitate ? 'ちょうど上限まで使い切るペースです' : `あと年${man(LIMIT.tsumitate - ts)}円（月${yen((LIMIT.tsumitate - ts) / 12)}円）入れられます`)
+      + meterHTML('成長投資枠', gr, LIMIT.growth, gr > LIMIT.growth ? `年${man(gr - LIMIT.growth)}円オーバー` : gr === LIMIT.growth ? 'ちょうど上限まで使い切るペースです' : `あと年${man(LIMIT.growth - gr)}円`)
+      + meterHTML('生涯の枠（今年まで）', lifeAfter, LIMIT.life, lifeAfter > LIMIT.life ? '生涯の上限を超えます' : `去年までの利用 ${man(lifeUsed)}円＋今年の見込み ${man(ts + gr)}円。` + (lifeAfter < LIMIT.life && (ts + gr) > 0 ? `このペースだと あと約${Math.ceil((LIMIT.life - lifeAfter) / (ts + gr))}年で埋まります` : ''))
+      + (gr > 0 || lifeG > 0 ? meterHTML('うち成長投資枠（生涯）', lifeGAfter, LIMIT.lifeGrowth, lifeGAfter > LIMIT.lifeGrowth ? '成長投資枠の生涯上限を超えます' : `去年まで ${man(lifeG)}円＋今年 ${man(gr)}円`) : '')
+      + `</div><div class="note">去年までに使った枠は「設定」で入れられます。毎日・毎週の積立は年${BIZ_DAYS}営業日・${WEEKS}週で計算しています。</div>`;
+    if (S.byNisa.taxable > 0) html += `<div class="note">課税口座（特定・一般）の積立：年${yen(S.byNisa.taxable)}円</div>`;
+
+    // 払い方
+    const payParts = Object.keys(PAY).map((k, i) => ({ k, v: S.byPay[k], c: ['#1F9D74', '#6B7A8F', '#2F7FE0', '#E8962E'][i] })).filter((x) => x.v > 0);
+    html += `<div class="label">払い方（毎月）</div><div class="card"><div class="stack">${payParts.map((p) => `<div style="width:${p.v / S.tot.m * 100}%;background:${p.c}"></div>`).join('')}</div><div class="rows">`
+      + payParts.map((p) => `<div class="r"><i style="background:${p.c}"></i><span>${PAY[p.k]}</span><b>${yen(p.v)}円</b></div>`).join('') + `</div></div>`;
+
+    // クレカごと
+    if (S.cards.size) {
+      const cap = Number(state.settings.cardCap) || 100000;
+      html += `<div class="label">クレカ積立（毎月）</div><div class="card"><div class="rows">`
+        + Array.from(S.cards.entries()).map(([k, c]) => `<div class="r${c.m > cap ? ' over' : ''}"><span>${esc(k)}${c.pts > 0 ? `<small>約${yen(c.pts)}pt／月</small>` : ''}</span><b>${yen(c.m)}円</b></div>`).join('')
+        + `</div></div><div class="note">クレカ積立は1枚あたり月${yen(cap)}円までが一般的です（上限は設定で変えられます）。超えている行は赤くなります。</div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  // ---------- 積立一覧 ----------
+  function renderList() {
+    const el = $('#listView');
+    if (!state.accounts.length) {
+      el.innerHTML = `<div class="empty"><b>まず口座を登録しましょう</b>楽天証券・SBI証券など、積み立てている口座を入れます。</div><button class="add-btn" id="accAdd0">＋ 口座を追加</button>`;
+      $('#accAdd0').onclick = () => openAccSheet(null);
+      return;
+    }
+    let html = '';
+    for (const a of state.accounts) {
+      const ps = state.plans.filter((p) => p.accountId === a.id);
+      const m = ps.reduce((s, p) => s + monthly(p), 0);
+      html += `<div class="acc-h"><i style="background:${a.color}"></i><b>${esc(a.name)}</b><span>月 ${yen(m)}円</span></div>`;
+      if (ps.length) {
+        html += `<div class="plans">` + ps.map((p) => `<button class="plan${p.paused ? ' paused' : ''}" data-plan="${p.id}">
+          <div class="a"><span class="nm">${esc(p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(p.amount)}円</span></div>
+          <div class="b"><span class="chip">${freqText(p)}</span><span class="chip ${p.nisa === 'growth' ? 'g' : p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[p.nisa] || 'つみたて'}</span>
+          <span class="chip">${PAY[p.pay] || '現金'}${p.pay === 'card' && p.card ? '・' + esc(p.card) : ''}</span>${p.paused ? '<span class="chip">停止中</span>' : ''}
+          ${p.freq !== 'monthly' && !p.paused ? `<span class="mo">月平均 ${yen(monthly(p))}円</span>` : ''}</div></button>`).join('') + `</div>`;
+      } else html += `<div class="plans"><div class="plan" style="cursor:default;color:var(--tertiary);font-size:14px">まだ積立がありません</div></div>`;
+    }
+    html += `<button class="add-btn" id="planAdd">＋ 積立を追加</button>`;
+    el.innerHTML = html;
+    $('#planAdd').onclick = () => openPlanSheet(null);
+    $$('[data-plan]', el).forEach((b) => b.onclick = () => openPlanSheet(state.plans.find((p) => p.id === b.dataset.plan)));
+  }
+
+  // ---------- 設定 ----------
+  function renderSettings() {
+    const el = $('#setView');
+    const s = state.settings;
+    el.innerHTML = `<div class="label">口座</div><div class="slist">`
+      + state.accounts.map((a) => `<button class="srow" data-acc="${a.id}"><i style="background:${a.color}"></i><span>${esc(a.name)}</span><small>${state.plans.filter((p) => p.accountId === a.id).length}本 ›</small></button>`).join('')
+      + `<button class="srow link" id="accAdd">＋ 口座を追加</button></div>
+      <div class="label">NISA（去年までに使った枠）</div><div class="slist">
+        <label class="srow"><span>生涯枠の利用額<br><small>去年までに買った合計（簿価）</small></span><input inputmode="numeric" id="lifeUsed" value="${s.lifeUsed ? yen(s.lifeUsed) : ''}" placeholder="0" /></label>
+        <label class="srow"><span>うち成長投資枠</span><input inputmode="numeric" id="lifeGrowthUsed" value="${s.lifeGrowthUsed ? yen(s.lifeGrowthUsed) : ''}" placeholder="0" /></label>
+      </div>
+      <div class="label">クレカ積立</div><div class="slist">
+        <label class="srow"><span>1枚あたりの上限（月）</span><input inputmode="numeric" id="cardCap" value="${yen(s.cardCap || 100000)}" /></label>
+      </div>
+      <div class="label">バックアップ</div><div class="slist">
+        <button class="srow link" id="exportBtn">データを書き出す（バックアップ）</button>
+        <button class="srow link" id="importBtn">データを取り込む</button>
+      </div><p class="note" id="bkNote"></p>
+      <div id="versionLabel">v${APP_VERSION}</div>`;
+    $$('[data-acc]', el).forEach((b) => b.onclick = () => openAccSheet(accOf(b.dataset.acc)));
+    $('#accAdd').onclick = () => openAccSheet(null);
+    for (const k of ['lifeUsed', 'lifeGrowthUsed', 'cardCap']) {
+      const inp = $('#' + k);
+      inp.addEventListener('change', async () => { state.settings[k] = toNum(inp.value); if (k === 'cardCap' && !state.settings.cardCap) state.settings.cardCap = 100000; await saveSettings(); inp.value = state.settings[k] ? yen(state.settings[k]) : ''; toast('保存しました'); });
+    }
+    $('#exportBtn').onclick = exportData;
+    $('#importBtn').onclick = () => $('#importFile').click();
+    const n = $('#bkNote'); n.textContent = bkText(); if (bkDue() && state.plans.length) n.style.color = 'var(--warn)';
+  }
+  const toNum = (v) => Number(String(v).replace(/[^\d.]/g, '')) || 0;
+
+  // ---------- シート ----------
+  function openSheet(html) { $('#sheet').innerHTML = html; $('#sheetBg').classList.add('show'); requestAnimationFrame(() => $('#sheet').classList.add('show')); }
+  function closeSheet() { $('#sheet').classList.remove('show'); $('#sheetBg').classList.remove('show'); if (document.activeElement) document.activeElement.blur(); }
+  $('#sheetBg').addEventListener('click', closeSheet);
+  function segHTML(name, opts, cur) { return `<div class="seg" data-seg="${name}">` + Object.entries(opts).map(([k, l]) => `<button type="button" data-v="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('') + `</div>`; }
+  function bindSeg(root, name, onPick) { const s = $(`[data-seg="${name}"]`, root); s.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; $$('button', s).forEach((x) => x.classList.toggle('on', x === b)); onPick(b.dataset.v); }); }
+
+  function openAccSheet(acc) {
+    if (!acc && !state.accounts.length) { /* 1つめ */ }
+    const d = acc ? { ...acc } : { id: uid(), name: '', color: COLORS[state.accounts.length % COLORS.length], order: state.accounts.length };
+    openSheet(`<h2>${acc ? '口座を編集' : '口座を追加'}</h2>
+      <div class="f"><div class="fl">口座の名前</div><input type="text" id="accName" maxlength="20" placeholder="例：楽天証券" value="${esc(d.name)}" /></div>
+      <div class="f"><div class="fl">色</div><div class="colors" id="accColors">${COLORS.map((c) => `<button type="button" data-c="${c}" class="${c === d.color ? 'on' : ''}" style="background:${c}"></button>`).join('')}</div></div>
+      <div class="btns"><button class="b-sub" id="sCancel">やめる</button><button class="b-main" id="sSave">保存</button></div>
+      ${acc ? '<button class="b-del" id="sDel">この口座を削除</button>' : ''}`);
+    $('#accColors').onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; d.color = b.dataset.c; $$('#accColors button').forEach((x) => x.classList.toggle('on', x === b)); };
+    $('#sCancel').onclick = closeSheet;
+    $('#sSave').onclick = async () => {
+      d.name = $('#accName').value.trim(); if (!d.name) { toast('口座の名前を入れてください'); return; }
+      d.updatedAt = Date.now(); await put('accounts', d); await loadAll(); closeSheet(); renderAll(); toast('保存しました');
+    };
+    if (acc) $('#sDel').onclick = async () => {
+      const n = state.plans.filter((p) => p.accountId === acc.id).length;
+      if (!(await ask(`「${acc.name}」を削除しますか？` + (n ? `\nこの口座の積立${n}本も消えます。` : '')))) return;
+      for (const p of state.plans.filter((p) => p.accountId === acc.id)) await del('plans', p.id);
+      await del('accounts', acc.id); await loadAll(); closeSheet(); renderAll(); toast('削除しました');
+    };
+  }
+
+  function openPlanSheet(plan) {
+    if (!state.accounts.length) { openAccSheet(null); toast('まず口座を登録しましょう'); return; }
+    const last = state.plans[state.plans.length - 1];
+    const d = plan ? JSON.parse(JSON.stringify(plan)) : { id: uid(), accountId: (last && accOf(last.accountId) ? last.accountId : state.accounts[0].id), fund: '', amount: '', freq: 'monthly', months: [6, 12], nisa: 'tsumitate', pay: 'card', card: last && last.card || '', rate: last && last.rate || '', paused: false, order: state.plans.length };
+    const accOpts = Object.fromEntries(state.accounts.map((a) => [a.id, esc(a.name)]));
+    openSheet(`<h2>${plan ? '積立を編集' : '積立を追加'}</h2>
+      <div class="f"><div class="fl">口座</div>${segHTML('acc', accOpts, d.accountId)}</div>
+      <div class="f"><div class="fl">銘柄</div><input type="text" id="pFund" maxlength="40" placeholder="例：eMAXIS Slim 全世界株式" value="${esc(d.fund)}" /></div>
+      <div class="f"><div class="fl">1回の金額</div><div class="yen"><input inputmode="numeric" id="pAmt" placeholder="0" value="${d.amount ? yen(d.amount) : ''}" /></div></div>
+      <div class="f"><div class="fl">頻度</div>${segHTML('freq', FREQ, d.freq)}
+        <div class="months" id="pMonths" style="display:${d.freq === 'months' ? 'grid' : 'none'}">${[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => `<button type="button" data-m="${m}" class="${(d.months || []).includes(m) ? 'on' : ''}">${m}月</button>`).join('')}</div>
+        <div class="hint" id="pFreqHint"></div></div>
+      <div class="f"><div class="fl">NISAの区分</div>${segHTML('nisa', NISA, d.nisa)}</div>
+      <div class="f"><div class="fl">払い方</div>${segHTML('pay', PAY, d.pay)}
+        <div id="pCardBox" style="display:${d.pay === 'card' ? 'block' : 'none'};margin-top:8px"><div class="two"><input type="text" id="pCard" maxlength="20" placeholder="カード名（例：楽天カード）" value="${esc(d.card)}" /><div class="pct"><input inputmode="decimal" id="pRate" placeholder="還元率" value="${d.rate || ''}" /></div></div></div></div>
+      <div class="f"><div class="toggle"><span>一時停止中<small>合計には入れません</small></span><button type="button" class="sw${d.paused ? ' on' : ''}" id="pPause"></button></div></div>
+      <div class="btns"><button class="b-sub" id="sCancel">やめる</button><button class="b-main" id="sSave">保存</button></div>
+      ${plan ? '<button class="b-del" id="sDel">この積立を削除</button>' : ''}`);
+    const root = $('#sheet');
+    const hint = () => {
+      const a = toNum($('#pAmt').value);
+      const tmp = { ...d, amount: a, paused: false };
+      $('#pFreqHint').textContent = a ? `年 ${yen(yearly(tmp))}円・月平均 ${yen(monthly(tmp))}円` + (d.freq === 'daily' ? '（年245営業日で計算）' : d.freq === 'weekly' ? '（年52週で計算）' : '') : '';
+    };
+    bindSeg(root, 'acc', (v) => { d.accountId = v; });
+    bindSeg(root, 'freq', (v) => { d.freq = v; $('#pMonths').style.display = v === 'months' ? 'grid' : 'none'; hint(); });
+    bindSeg(root, 'nisa', (v) => { d.nisa = v; });
+    bindSeg(root, 'pay', (v) => { d.pay = v; $('#pCardBox').style.display = v === 'card' ? 'block' : 'none'; });
+    $('#pMonths').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; const m = +b.dataset.m; d.months = (d.months || []).includes(m) ? d.months.filter((x) => x !== m) : [...(d.months || []), m]; b.classList.toggle('on'); hint(); };
+    const amt = $('#pAmt');
+    amt.addEventListener('input', hint);
+    amt.addEventListener('blur', () => { const v = toNum(amt.value); amt.value = v ? yen(v) : ''; });
+    $('#pPause').onclick = (e) => { d.paused = !d.paused; e.currentTarget.classList.toggle('on', d.paused); };
+    hint();
+    $('#sCancel').onclick = closeSheet;
+    $('#sSave').onclick = async () => {
+      d.amount = toNum(amt.value);
+      if (!d.amount) { toast('金額を入れてください'); return; }
+      if (d.freq === 'months' && !(d.months || []).length) { toast('積み立てる月を選んでください'); return; }
+      d.fund = $('#pFund').value.trim();
+      d.card = d.pay === 'card' ? $('#pCard').value.trim() : '';
+      d.rate = d.pay === 'card' ? (Number(String($('#pRate').value).replace(/[^\d.]/g, '')) || 0) : 0;
+      d.updatedAt = Date.now();
+      await put('plans', d); await loadAll(); closeSheet(); renderAll(); toast(plan ? '保存しました' : '追加しました');
+    };
+    if (plan) $('#sDel').onclick = async () => {
+      if (!(await ask(`「${plan.fund || 'この積立'}」を削除しますか？`))) return;
+      await del('plans', plan.id); await loadAll(); closeSheet(); renderAll();
+      toast('削除しました', '取り消す', async () => { await put('plans', plan); await loadAll(); renderAll(); });
+    };
+  }
+
+  // ---------- 画面 ----------
+  function renderAll() { renderHome(); renderList(); renderSettings(); }
+  function switchTab(id) {
+    state.tab = id;
+    $$('.view').forEach((v) => v.classList.toggle('on', v.id === id));
+    $$('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    $('#navTitle').textContent = id === 'homeView' ? 'pile' : id === 'listView' ? '積立' : '設定';
+    const r = $('#navRight');
+    r.style.display = id === 'listView' && state.accounts.length ? '' : 'none';
+    r.textContent = '＋';
+    $('#' + id).scrollTop = 0;
+  }
+  $('.tabbar').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
+  $('#navRight').onclick = () => openPlanSheet(null);
+
+  // ---------- トースト・確認（alert/confirm は使わない） ----------
+  let toastT = 0;
+  function toast(msg, label, fn) {
+    const t = $('#toast'); t.querySelector('span').textContent = msg;
+    const b = t.querySelector('button'); b.textContent = label || ''; b.onclick = fn ? () => { t.classList.remove('show'); fn(); } : null;
+    t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), fn ? 5000 : 2200);
+  }
+  function ask(msg) {
+    return new Promise((res) => {
+      $('#askMsg').textContent = msg; $('#askBg').classList.add('show');
+      const done = (v) => { $('#askBg').classList.remove('show'); $('#askYes').onclick = $('#askNo').onclick = null; res(v); };
+      $('#askYes').onclick = () => done(true); $('#askNo').onclick = () => done(false);
+    });
+  }
+
+  // ---------- バックアップ（全アプリ共通の作法） ----------
+  function bkName(app) { const d = new Date(); return `${app}_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`; }
+  async function bkSave(app, text) {
+    const name = bkName(app);
+    if (navigator.maxTouchPoints > 0) {
+      try {
+        const file = new File([text], name, { type: 'application/json' });
+        if (navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return 'ok'; }
+      } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return 'ok';
+  }
+  const BK_KEY = 'pile.lastBackupAt', SCHEMA = 'pile.v1';
+  function bkText() { let t = 0; try { t = Number(localStorage.getItem(BK_KEY) || 0); } catch (e) {} if (!t) return 'まだ一度もバックアップしていません'; const d = Math.floor((Date.now() - t) / 86400000); return d === 0 ? '前回のバックアップ：今日' : '前回のバックアップから ' + d + '日'; }
+  function bkDue() { let t = 0; try { t = Number(localStorage.getItem(BK_KEY) || 0); } catch (e) {} return !t || Date.now() - t >= 30 * 86400000; }
+  async function exportData() {
+    const data = { schema: SCHEMA, exportedAt: new Date().toISOString(), accounts: state.accounts, plans: state.plans, settings: state.settings };
+    if (await bkSave('pile', JSON.stringify(data, null, 2)) !== 'ok') return;
+    try { localStorage.setItem(BK_KEY, String(Date.now())); } catch (e) {}
+    renderSettings(); toast('書き出しました');
+  }
+  $('#importFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (data.schema !== SCHEMA) { toast('pileのデータではないようです'); return; }
+      const merge = async (store, list, cur) => { const m = new Map(cur.map((x) => [x.id, x])); let n = 0; for (const it of (list || [])) { const l = m.get(it.id); if (!l || (it.updatedAt || 0) > (l.updatedAt || 0)) { await put(store, it); n++; } } return n; };
+      const n = await merge('accounts', data.accounts, state.accounts) + await merge('plans', data.plans, state.plans);
+      if (data.settings && (data.settings.updatedAt || 0) > (state.settings.updatedAt || 0)) { Object.assign(state.settings, data.settings); await saveSettings(); }
+      await loadAll(); renderAll(); toast(n + '件 取り込みました');
+    } catch (err) { toast('取り込めませんでした'); }
+  });
+
+  // ---------- visualViewport（キーボード対策：CLAUDE.md「iPhoneの定石」） ----------
+  function setupViewportTracking() {
+    const vv = window.visualViewport; if (!vv) return;
+    const root = document.documentElement; let lastH = -1, lastT = -1;
+    function apply() {
+      const h = Math.round(vv.height), t = Math.max(0, Math.round(vv.offsetTop));
+      if (h !== lastH) { root.style.setProperty('--app-height', h + 'px'); lastH = h; }
+      if (t !== lastT) { root.style.setProperty('--app-top', t + 'px'); lastT = t; }
+    }
+    let until = 0, looping = false;
+    function follow(ms) {
+      until = Math.max(until, performance.now() + ms);
+      if (looping) return; looping = true;
+      const tick = () => { apply(); const typing = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName); if (typing || performance.now() < until) requestAnimationFrame(tick); else looping = false; };
+      requestAnimationFrame(tick);
+    }
+    vv.addEventListener('resize', () => follow(600)); vv.addEventListener('scroll', () => follow(600));
+    document.addEventListener('focusin', () => follow(1200)); document.addEventListener('focusout', () => follow(1200));
+    apply();
+  }
+
+  // ---------- 起動 ----------
+  (async function init() {
+    setupViewportTracking();
+    await openDB(); await loadAll(); renderAll(); switchTab('homeView');
+  })();
+
+  // ---------- Service Worker + 自動アップデート ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const res = await fetch(new URL('sw.js', location.href).href, { method: 'HEAD' }); if (!res.ok) return;
+        const reg = await navigator.serviceWorker.register('sw.js');
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+        reg.addEventListener('updatefound', () => { const sw = reg.installing; if (!sw) return; sw.addEventListener('statechange', () => { if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(sw); }); });
+        reg.update();
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing) return; refreshing = true; window.location.reload(); });
+      } catch (e) {}
+    });
+  }
+  function showUpdateBanner(waitingSW) {
+    if (document.getElementById('updateBanner')) return;
+    const b = document.createElement('button'); b.id = 'updateBanner';
+    b.innerHTML = '<span>新しいバージョンがあります — タップで更新</span>';
+    b.addEventListener('click', () => { b.disabled = true; b.querySelector('span').textContent = '更新中…'; waitingSW.postMessage('SKIP_WAITING'); });
+    document.body.appendChild(b); requestAnimationFrame(() => b.classList.add('show'));
+  }
+</script>
+</body>
+</html>
