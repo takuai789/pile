@@ -121,6 +121,8 @@
   .chip.t { background: rgba(31,157,116,.13); color: #157A59; }
   .chip.g { background: rgba(47,127,224,.13); color: #2366B5; }
   .chip.k { background: rgba(28,36,33,.07); color: var(--secondary); }
+  .chip.up { background: rgba(229,87,122,.12); color: #C2385F; }
+  .chip.down { background: rgba(107,122,143,.14); color: #4E5B6E; }
   .plan .b .mo { margin-left: auto; font-size: 12px; color: var(--tertiary); }
   .plan.paused { opacity: .45; }
   .add-btn { display: block; width: 100%; margin-top: 14px; border: 1.5px dashed var(--tertiary); background: none; border-radius: 14px; padding: 14px; font: inherit; font-size: 15px; font-weight: 700; color: var(--secondary); cursor: pointer; }
@@ -147,6 +149,12 @@
   .f input[type=text], .f input[type=number], .f input[inputmode] { width: 100%; height: 46px; border: 0; background: var(--card); border-radius: 12px; padding: 0 14px; font-size: 16px; color: var(--ink); outline: none; box-shadow: var(--shadow); }
   .f input:focus { box-shadow: 0 0 0 2px var(--accent); }
   .f input.mon { width: 100%; min-width: 0; max-width: 100%; display: block; height: 44px; border: 0; background: var(--card); border-radius: 12px; padding: 0 12px; font-size: 15px; color: var(--ink); box-shadow: var(--shadow); -webkit-appearance: none; appearance: none; }
+  .hist { margin-top: 10px; background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 4px 12px; }
+  .hist .hr { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; }
+  .hist .hr + .hr { border-top: .5px solid var(--sep); }
+  .hist .hr span { color: var(--secondary); font-weight: 700; min-width: 64px; }
+  .hist .hr b { flex: 1; font-variant-numeric: tabular-nums; }
+  .hist .hr button { border: 0; background: none; color: var(--red); font: inherit; font-size: 12px; font-weight: 700; }
   .yen { position: relative; }
   .yen::after { content: '円'; position: absolute; right: 14px; top: 13px; font-size: 15px; color: var(--secondary); pointer-events: none; }
   .yen input { padding-right: 36px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -240,7 +248,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.6.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -268,21 +276,35 @@
   function endIdx(p) { return p.end ? ymIdx(p.end) : Infinity; }
   function activeNow(p) { const n = new Date(), k = n.getFullYear() * 12 + n.getMonth(); return k >= (p.start ? ymIdx(p.start) : -Infinity) && k <= endIdx(p); }
   // その年に入る金額（年ごとの表・NISA枠に使う）
+  // 金額の変更履歴：history = [{ from:'YYYY-MM', amount, prev }]（古い順）。その月から金額が変わる
+  const hist = (p) => (p.history || []).slice().sort((x, y) => x.from < y.from ? -1 : 1);
+  function amountAt(p, k) {
+    const h = hist(p);
+    if (!h.length) return Number(p.amount) || 0;
+    let a = Number(h[0].prev) || 0;
+    for (const e of h) if (ymIdx(e.from) <= k) a = Number(e.amount) || 0;
+    return a;
+  }
+  const nowIdx = () => { const n = new Date(); return n.getFullYear() * 12 + n.getMonth(); };
+  const curAmount = (p) => p.freq === 'spot' ? (Number(p.amount) || 0) : amountAt(p, nowIdx());
   function amountInYear(p, Y) {
     if (p.paused) return 0;
-    const a = Number(p.amount) || 0;
-    if (p.freq === 'spot') return p.date && +p.date.slice(0, 4) === Y ? a : 0;
+    if (p.freq === 'spot') return p.date && +p.date.slice(0, 4) === Y ? (Number(p.amount) || 0) : 0;
     const s = startIdx(p), e = endIdx(p);
-    const ms = []; for (let m = 0; m < 12; m++) { const k = Y * 12 + m; if (k >= s && k <= e) ms.push(m + 1); }
-    if (p.freq === 'months') return a * (p.months || []).filter((m) => ms.includes(m)).length;
-    const per = p.freq === 'weekly' ? a * WEEKS / 12 : p.freq === 'daily' ? a * BIZ_DAYS / 12 : a;
-    return per * ms.length;
+    let sum = 0;
+    for (let m = 0; m < 12; m++) {
+      const k = Y * 12 + m; if (k < s || k > e) continue;
+      const a = amountAt(p, k);
+      if (p.freq === 'months') { if ((p.months || []).includes(m + 1)) sum += a; }
+      else sum += p.freq === 'weekly' ? a * WEEKS / 12 : p.freq === 'daily' ? a * BIZ_DAYS / 12 : a;
+    }
+    return sum;
   }
   const nisaThisYear = (p) => amountInYear(p, THIS_YEAR);
   // 今動いている積立の年額（毎月の合計などに使う）
   function yearly(p) {
     if (p.paused || p.freq === 'spot' || !activeNow(p)) return 0;
-    const a = Number(p.amount) || 0;
+    const a = curAmount(p);
     if (p.freq === 'weekly') return a * WEEKS;
     if (p.freq === 'daily') return a * BIZ_DAYS;
     if (p.freq === 'months') return a * (p.months || []).length;
@@ -515,8 +537,8 @@
       html += `<div class="acc-h"><i style="background:${a.color}"></i><b>${esc(a.name)}</b><span>月 ${yen(m)}円</span></div>`;
       if (ps.length) {
         html += `<div class="plans">` + ps.map((p) => `<button class="plan${p.paused ? ' paused' : ''}" data-plan="${p.id}">
-          <div class="a"><span class="nm">${esc(p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(p.amount)}円</span></div>
-          <div class="b"><span class="chip">${freqText(p)}</span>${periodText(p) ? `<span class="chip">${periodText(p)}</span>` : ''}${p.freq !== 'spot' && !p.paused && !activeNow(p) ? `<span class="chip">${p.start && ymIdx(p.start) > ymIdx(today().slice(0, 7)) ? 'これから' : '終了'}</span>` : ''}<span class="chip ${p.nisa === 'growth' ? 'g' : p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[p.nisa] || 'つみたて'}</span>
+          <div class="a"><span class="nm">${esc(p.fund || '（銘柄名なし）')}</span><span class="amt">${yen(curAmount(p))}円</span></div>
+          <div class="b">${changeChip(p)}<span class="chip">${freqText(p)}</span>${periodText(p) ? `<span class="chip">${periodText(p)}</span>` : ''}${p.freq !== 'spot' && !p.paused && !activeNow(p) ? `<span class="chip">${p.start && ymIdx(p.start) > ymIdx(today().slice(0, 7)) ? 'これから' : '終了'}</span>` : ''}<span class="chip ${p.nisa === 'growth' ? 'g' : p.nisa === 'taxable' ? 'k' : 't'}">${NISA_SHORT[p.nisa] || 'つみたて'}</span>
           <span class="chip">${PAY[p.pay] || '現金'}${p.pay === 'card' && p.card ? '・' + esc(p.card) : ''}</span>${p.paused ? '<span class="chip">停止中</span>' : ''}
           ${p.freq !== 'monthly' && p.freq !== 'spot' && !p.paused ? `<span class="mo">月平均 ${yen(monthly(p))}円</span>` : ''}</div></button>`).join('') + `</div>`;
       } else html += `<div class="plans"><div class="plan" style="cursor:default;color:var(--tertiary);font-size:14px">まだ積立がありません</div></div>`;
@@ -525,6 +547,17 @@
     el.innerHTML = html;
     $('#planAdd').onclick = () => openPlanSheet(null);
     $$('[data-plan]', el).forEach((b) => b.onclick = () => openPlanSheet(state.plans.find((p) => p.id === b.dataset.plan)));
+  }
+
+  // 直近の金額変更（または予定）をチップで
+  function changeChip(p) {
+    const h = hist(p); if (!h.length || p.freq === 'spot') return '';
+    const n = nowIdx();
+    const future = h.find((e) => ymIdx(e.from) > n);
+    const e = future || h.filter((x) => ymIdx(x.from) <= n).pop();
+    if (!e || (!future && n - ymIdx(e.from) > 11)) return '';
+    const up = (Number(e.amount) || 0) >= (Number(e.prev) || 0);
+    return `<span class="chip ${up ? 'up' : 'down'}">${ymLabel(e.from)}${future ? 'から' : 'に'}${up ? '増額' : '減額'}（${man(e.prev)}→${man(e.amount)}）</span>`;
   }
 
   // ---------- 設定 ----------
@@ -598,7 +631,9 @@
     openSheet(`<h2>${plan ? '積立を編集' : '積立を追加'}</h2>
       <div class="f"><div class="fl">口座</div>${segHTML('acc', accOpts, d.accountId)}</div>
       <div class="f"><div class="fl">銘柄</div><input type="text" id="pFund" maxlength="40" placeholder="例：eMAXIS Slim 全世界株式" value="${esc(d.fund)}" /></div>
-      <div class="f"><div class="fl">1回の金額</div><div class="yen"><input inputmode="numeric" id="pAmt" placeholder="0" value="${d.amount ? yen(d.amount) : ''}" /></div></div>
+      <div class="f"><div class="fl">1回の金額${plan && plan.freq !== 'spot' ? '（今）' : ''}</div><div class="yen"><input inputmode="numeric" id="pAmt" placeholder="0" value="${plan ? yen(curAmount(plan)) : (d.amount ? yen(d.amount) : '')}" /></div>
+        ${plan && plan.freq !== 'spot' ? `<div id="pChgBox" style="display:none;margin-top:8px"><div style="font-size:12px;font-weight:700;color:var(--accent);margin:0 4px 4px">金額を変えた月（この月から新しい金額）</div><input type="month" id="pChg" value="${today().slice(0, 7)}" class="mon" /></div>` : ''}
+        ${plan && hist(plan).length ? `<div class="hist">${hist(plan).map((e) => `<div class="hr"><span>${ymLabel(e.from)}〜</span><b>${yen(e.prev)} → ${yen(e.amount)}円</b><button type="button" data-hdel="${e.from}">取り消す</button></div>`).join('')}</div>` : ''}</div>
       <div class="f"><div class="fl">頻度（スポットは1回だけの買付）</div>${segHTML('freq', FREQ, d.freq)}
         <div class="months" id="pMonths" style="display:${d.freq === 'months' ? 'grid' : 'none'}">${[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => `<button type="button" data-m="${m}" class="${(d.months || []).includes(m) ? 'on' : ''}">${m}月</button>`).join('')}</div>
         <div id="pDateBox" style="display:${d.freq === 'spot' ? 'block' : 'none'};margin-top:8px"><input type="date" id="pDate" value="${esc(d.date || today())}" style="width:100%;height:46px;border:0;background:var(--card);border-radius:12px;padding:0 14px;font-size:16px;color:var(--ink);box-shadow:var(--shadow);-webkit-appearance:none;appearance:none" /></div>
@@ -616,7 +651,7 @@
     const root = $('#sheet');
     const hint = () => {
       const a = toNum($('#pAmt').value);
-      const tmp = { ...d, amount: a, paused: false, start: undefined, end: undefined }; // 期間に関係なく、動いているときの額
+      const tmp = { ...d, amount: a, paused: false, start: undefined, end: undefined, history: undefined }; // 期間に関係なく、動いているときの額
       $('#pFreqHint').textContent = d.freq === 'spot' ? '1回だけの買付です。毎月の積立の合計には入れず、買付日の年のNISA枠に入れます。' : a ? `年 ${yen(yearly(tmp))}円・月平均 ${yen(monthly(tmp))}円` + (d.freq === 'daily' ? '（年245営業日で計算）' : d.freq === 'weekly' ? '（年52週で計算）' : '') : '';
     };
     bindSeg(root, 'acc', (v) => { d.accountId = v; });
@@ -626,12 +661,26 @@
     $('#pMonths').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; const m = +b.dataset.m; d.months = (d.months || []).includes(m) ? d.months.filter((x) => x !== m) : [...(d.months || []), m]; b.classList.toggle('on'); hint(); };
     const amt = $('#pAmt');
     amt.addEventListener('input', hint);
+    // 既存の積立の金額を変えたら「変えた月」を聞く（変更履歴として残す）
+    const origAmt = plan ? curAmount(plan) : 0;
+    if ($('#pChgBox')) amt.addEventListener('input', () => { const v = toNum(amt.value); $('#pChgBox').style.display = v && v !== origAmt && d.freq !== 'spot' ? 'block' : 'none'; });
+    $$('[data-hdel]', root).forEach((b) => b.onclick = () => { d.history = (d.history || []).filter((e) => e.from !== b.dataset.hdel); b.closest('.hr').remove(); toast('保存すると、この変更を取り消します'); });
     amt.addEventListener('blur', () => { const v = toNum(amt.value); amt.value = v ? yen(v) : ''; });
     $('#pPause').onclick = (e) => { d.paused = !d.paused; e.currentTarget.classList.toggle('on', d.paused); };
     hint();
     $('#sCancel').onclick = closeSheet;
     $('#sSave').onclick = async () => {
-      d.amount = toNum(amt.value);
+      const newAmt = toNum(amt.value);
+      if (plan && plan.freq !== 'spot' && d.freq !== 'spot' && newAmt && newAmt !== origAmt) {
+        const from = ($('#pChg') && $('#pChg').value) || today().slice(0, 7);
+        const h = (d.history || []).filter((e) => e.from !== from);
+        const prev = amountAt({ ...d, history: h }, ymIdx(from) - 1) || origAmt;
+        h.push({ from, amount: newAmt, prev });
+        d.history = h.sort((x, y) => x.from < y.from ? -1 : 1);
+      }
+      if (d.freq === 'spot') delete d.history;
+      d.amount = (d.history && d.history.length) ? d.history[d.history.length - 1].amount : newAmt; // いちばん新しい金額
+      if (!d.amount) d.amount = newAmt;
       if (!d.amount) { toast('金額を入れてください'); return; }
       if (d.freq === 'months' && !(d.months || []).length) { toast('積み立てる月を選んでください'); return; }
       if (d.freq === 'spot') { d.date = $('#pDate').value || today(); delete d.start; delete d.end; }
