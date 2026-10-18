@@ -95,6 +95,8 @@
   .ytab tr.past td { color: var(--secondary); }
   .ytab td.ov { color: var(--red); font-weight: 800; }
   .ytab .z { color: var(--tertiary); }
+  .ytab tr.out td { background: rgba(28,36,33,.035); }
+  .ytab tr.out td:first-child small { display: block; font-size: 10px; font-weight: 700; color: var(--tertiary); }
   .note b { color: var(--ink); }
   /* 積立一覧 */
   .acc-h { display: flex; align-items: center; gap: 8px; margin: 18px 4px 8px; }
@@ -232,7 +234,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
@@ -362,6 +364,8 @@
     const m1 = (v) => v ? (Math.round(v / 1000) / 10).toLocaleString('ja-JP') : '<span class="z">–</span>';
     let html = `<div class="label" style="margin-top:6px">年ごとの投資額（万円）</div><div class="card ytab"><table><thead><tr><th>年</th><th>つみたて</th><th>成長</th><th>課税</th><th>合計</th><th>NISA累計</th></tr></thead><tbody>`;
     let reach = null;
+    const outL = Number(state.settings.lifeUsed) || 0, outG = Number(state.settings.lifeGrowthUsed) || 0;
+    if (outL || outG) html += `<tr class="past out"><td>過去<small>アプリ外</small></td><td>${m1(Math.max(0, outL - outG))}</td><td>${m1(outG)}</td><td><span class="z">–</span></td><td><b>${m1(outL)}</b></td><td>${m1(outL)}</td></tr>`;
     for (const r of rows) {
       const oT = r.t > LIMIT.tsumitate, oG = r.g > LIMIT.growth, oL = r.life > LIMIT.life || r.lifeG > LIMIT.lifeGrowth;
       if (!reach && r.life >= LIMIT.life) reach = r.Y;
@@ -369,7 +373,7 @@
     }
     html += `</tbody></table></div>`;
     html += `<div class="note">${reach ? `今の設定のままだと、NISAの生涯枠（1,800万円）は <b>${reach}年</b> に埋まります。` : 'この表の範囲では、NISAの生涯枠（1,800万円）はまだ埋まりません。'}赤い数字は上限（つみたて120万・成長240万／年、生涯1,800万・うち成長1,200万）を超えている年です。</div>
-      <div class="note">来年以降の予定は、積立ごとの「期間」（開始・終了の年月）で入れられます。たとえば「2027年1月から月10万円に増やす」なら、今の積立の終了を2026年12月にして、2027年1月開始の積立を足します。NISA累計には「設定」で入れた、アプリに入れていない過去の利用額も含みます。</div>`;
+      <div class="note">来年以降の予定は、積立ごとの「期間」（開始・終了の年月）で入れられます。たとえば「2027年1月から月10万円に増やす」なら、今の積立の終了を2026年12月にして、2027年1月開始の積立を足します。NISA累計は、「設定」で入れたアプリに入れていない過去の利用額（表の一番上の「過去」の行）から積み上げています。</div>`;
     el.innerHTML = html;
   }
 
@@ -500,7 +504,7 @@
     $('#accAdd').onclick = () => openAccSheet(null);
     for (const k of ['lifeUsed', 'lifeGrowthUsed', 'cardCap', 'rcashCap']) {
       const inp = $('#' + k);
-      inp.addEventListener('change', async () => { state.settings[k] = toNum(inp.value); if (k === 'cardCap' && !state.settings.cardCap) state.settings.cardCap = 100000; if (k === 'rcashCap' && !state.settings.rcashCap) state.settings.rcashCap = 50000; await saveSettings(); inp.value = state.settings[k] ? yen(state.settings[k]) : ''; toast('保存しました'); });
+      inp.addEventListener('change', async () => { state.settings[k] = toNum(inp.value); if (k === 'cardCap' && !state.settings.cardCap) state.settings.cardCap = 100000; if (k === 'rcashCap' && !state.settings.rcashCap) state.settings.rcashCap = 50000; await saveSettings(); inp.value = state.settings[k] ? yen(state.settings[k]) : ''; renderHome(); renderYears(); toast('保存しました'); });
     }
     $('#exportBtn').onclick = exportData;
     $('#importBtn').onclick = () => $('#importFile').click();
