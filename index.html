@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="pile" />
 <meta name="theme-color" content="#F2F6F4" />
 <link rel="manifest" href="manifest.webmanifest" />
@@ -212,6 +212,7 @@
   #updateBanner { position: fixed; left: 12px; right: 12px; bottom: calc(var(--safe-bottom) + 70px); z-index: 1000; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: #fff; border: 0; border-radius: 14px; padding: 14px 18px; font: inherit; font-size: 14px; font-weight: 700; box-shadow: 0 8px 28px rgba(0,0,0,.2); cursor: pointer; transform: translateY(200%); transition: transform .35s cubic-bezier(.32,.72,0,1); }
   #updateBanner.show { transform: translateY(0); }
 </style>
+<script>/* iPhoneが容量不足のときに保存データを消さないよう、端末にお願いしておく */try{navigator.storage&&navigator.storage.persist&&navigator.storage.persisted().then(function(p){if(!p)navigator.storage.persist();});}catch(e){}</script>
 </head>
 <body>
 <div id="app">
@@ -259,7 +260,7 @@
   const del = (s, id) => new Promise((res, rej) => { const r = tx(s, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
   // ---------- バージョン（sw.js の CACHE とセットで上げる） ----------
-  const APP_VERSION = '1.8.0';
+  const APP_VERSION = '1.9.0';
 
   // ---------- 定数 ----------
   // account: { id, name, color, order, updatedAt }
